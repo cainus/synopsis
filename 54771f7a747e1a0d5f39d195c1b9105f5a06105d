@@ -1,0 +1,23 @@
+.gitignore
+  bca8bdd9760f53c7 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "54771f7a747e1a0d5f39d195c1b9105f5a06105d",
+  "prompts": {
+    "bca8bdd9760f53c7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f32fd2f-cd80-444c-90f0-31526c0967dd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Greggory Caines <gregg@caines.ca>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
