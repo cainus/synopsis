@@ -1,0 +1,63 @@
+src/hooks/useRepo.ts
+  bca8bdd9760f53c7 6-21,32,44-46,77-81,146
+src/components/FolderPicker.tsx
+  bca8bdd9760f53c7 1,9,12-15,25-34,40-46,51-72
+spec/summary-tab.md
+  8d5a80eb1fc12869 1-35
+spec/tests-tab.md
+  bca8bdd9760f53c7 7,10-16,24,27,35-36,39,44,46-47,51,53-56,58-63,65-68,89,97
+  8d5a80eb1fc12869 1-6,8-9,17-23,25-26,28-34,37-38,40-43,45,48-50,52,57,64,69-88,90-96,98
+CLAUDE.md
+  8d5a80eb1fc12869 1-53
+src/components/SummaryTab.tsx
+  bca8bdd9760f53c7 28-36
+src/App.css
+  bca8bdd9760f53c7 76-136,327-339,364-394
+spec/delta-tab.md
+  8d5a80eb1fc12869 1-34
+src/types.ts
+  bca8bdd9760f53c7 14
+src-tauri/src/git.rs
+  bca8bdd9760f53c7 21,78,177,191,214,247-263,309-350,394,398-401,403-406,409-434,446-460,463-468,472,490,492-515,517,519,522-523,525-526
+spec/overview.md
+  8d5a80eb1fc12869 1-26
+spec/architecture.md
+  8d5a80eb1fc12869 1-112
+src/components/TestsTab.tsx
+  bca8bdd9760f53c7 11-16,21-28,31-47
+src/App.tsx
+  bca8bdd9760f53c7 17,41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "6eb1c95b46583948d11b511e3042b731e1577979",
+  "prompts": {
+    "8d5a80eb1fc12869": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d949f361-840b-41e0-aac0-70af7a2b3c14",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Greggory Caines <gregg@caines.ca>",
+      "messages": [],
+      "total_additions": 334,
+      "total_deletions": 0,
+      "accepted_lines": 963,
+      "overriden_lines": 0
+    },
+    "bca8bdd9760f53c7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f32fd2f-cd80-444c-90f0-31526c0967dd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Greggory Caines <gregg@caines.ca>",
+      "messages": [],
+      "total_additions": 421,
+      "total_deletions": 65,
+      "accepted_lines": 410,
+      "overriden_lines": 0
+    }
+  }
+}
