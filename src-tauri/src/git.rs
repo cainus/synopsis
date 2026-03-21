@@ -789,4 +789,150 @@ mod tests {
         assert_eq!(tests.len(), 1);
         assert_eq!(tests[0].0, "outer > inner test");
     }
+
+    // ── is_test_file (additional) ─────────────────────────────────────────────
+
+    #[test]
+    fn test_is_test_file_python_suffix() {
+        assert!(is_test_file("src/utils_test.py"));
+    }
+
+    // ── extract_rust_fn_name ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_extract_rust_fn_name_plain() {
+        assert_eq!(
+            extract_rust_fn_name("fn my_function() {"),
+            Some("my_function".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_rust_fn_name_async() {
+        assert_eq!(
+            extract_rust_fn_name("async fn handle_request() {"),
+            Some("handle_request".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_rust_fn_name_no_match() {
+        assert_eq!(extract_rust_fn_name("let x = 1;"), None);
+    }
+
+    // ── extract_fn_test_name ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_extract_fn_test_name_go_test() {
+        assert_eq!(
+            extract_fn_test_name("func TestParseInput(t *testing.T) {"),
+            Some("TestParseInput".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_fn_test_name_go_benchmark() {
+        assert_eq!(
+            extract_fn_test_name("func BenchmarkSort(b *testing.B) {"),
+            Some("BenchmarkSort".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_fn_test_name_python() {
+        assert_eq!(
+            extract_fn_test_name("def test_returns_none():"),
+            Some("test_returns_none".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_fn_test_name_python_with_self() {
+        assert_eq!(
+            extract_fn_test_name("def test_login(self):"),
+            Some("test_login".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_fn_test_name_rust_test_prefix() {
+        assert_eq!(
+            extract_fn_test_name("fn test_parse_empty() {"),
+            Some("test_parse_empty".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_fn_test_name_rust_should_prefix() {
+        assert_eq!(
+            extract_fn_test_name("fn should_return_error() {"),
+            Some("should_return_error".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_fn_test_name_no_match() {
+        assert_eq!(extract_fn_test_name("fn helper() {"), None);
+        assert_eq!(extract_fn_test_name("let x = 1;"), None);
+    }
+
+    // ── extract_changed_tests: #[test] attribute tracking ────────────────────
+
+    #[test]
+    fn test_extract_changed_tests_rust_test_attr() {
+        let diff = r#"@@ -1,5 +1,6 @@
+ #[cfg(test)]
+ mod tests {
+     #[test]
+-    fn parses_empty() {
+-        assert_eq!(parse(""), None);
++    fn parses_empty() {
++        assert_eq!(parse(""), Some(""));
+     }
+ }"#;
+        let tests = extract_changed_tests(diff);
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].0, "parses_empty");
+    }
+
+    #[test]
+    fn test_extract_changed_tests_rust_test_attr_arbitrary_name() {
+        // #[test] should pick up any fn name, not just test_ prefix
+        let diff = r#"@@ -1,4 +1,4 @@
+ #[test]
+ fn it_handles_overflow() {
+-    assert!(overflow(i32::MAX).is_err());
++    assert_eq!(overflow(i32::MAX), Err(OverflowError));
+ }"#;
+        let tests = extract_changed_tests(diff);
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].0, "it_handles_overflow");
+    }
+
+    #[test]
+    fn test_extract_changed_tests_go_func() {
+        let diff = r#"@@ -1,5 +1,5 @@
+ func TestParseInput(t *testing.T) {
+-    got := parse("")
++    got := parse("input")
+     if got == nil {
+         t.Fatal("expected non-nil")
+     }
+ }"#;
+        let tests = extract_changed_tests(diff);
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].0, "TestParseInput");
+    }
+
+    #[test]
+    fn test_extract_changed_tests_python_def() {
+        let diff = r#"@@ -1,3 +1,3 @@
+ def test_returns_none():
+-    assert helper() is None
++    assert helper() == []
+"#;
+        let tests = extract_changed_tests(diff);
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].0, "test_returns_none");
+    }
 }

@@ -6,11 +6,18 @@ const result: TestsResult = {
   test_cases: [
     {
       full_name: "UserService > login > handles invalid password",
+      file: "src/services/UserService.test.ts",
       behaviour_change: "Now throws an error instead of returning null",
     },
     {
       full_name: "formatDate > formats ISO strings",
+      file: "src/services/UserService.test.ts",
       behaviour_change: "No behaviour change",
+    },
+    {
+      full_name: "renders correctly",
+      file: "src/components/Button.test.tsx",
+      behaviour_change: "New test",
     },
   ],
 };
@@ -21,9 +28,10 @@ describe("TestsTab", () => {
     expect(screen.getByText(/pick a repo folder/i)).toBeInTheDocument();
   });
 
-  it("shows loading message while Claude analyses", () => {
+  it("shows spinner while Claude analyses", () => {
     render(<TestsTab result={null} loading={true} hasRepo={true} />);
-    expect(screen.getByText(/analysing test changes/i)).toBeInTheDocument();
+    expect(screen.getByText(/claude is thinking/i)).toBeInTheDocument();
+    expect(document.querySelector(".spinner")).toBeInTheDocument();
   });
 
   it("shows empty state when no test files changed", () => {
@@ -66,5 +74,23 @@ describe("TestsTab", () => {
       "Now throws an error instead of returning null"
     );
     expect(change).not.toHaveClass("no-change");
+  });
+
+  it("applies new-test class to 'New test' entries", () => {
+    render(<TestsTab result={result} loading={false} hasRepo={true} />);
+    const newTest = screen.getByText("New test");
+    expect(newTest).toHaveClass("new-test");
+  });
+
+  it("renders a file header for each distinct file", () => {
+    render(<TestsTab result={result} loading={false} hasRepo={true} />);
+    expect(screen.getByText("src/services/UserService.test.ts")).toBeInTheDocument();
+    expect(screen.getByText("src/components/Button.test.tsx")).toBeInTheDocument();
+  });
+
+  it("groups tests under their file header", () => {
+    render(<TestsTab result={result} loading={false} hasRepo={true} />);
+    const groups = document.querySelectorAll(".tests-file-group");
+    expect(groups).toHaveLength(2);
   });
 });

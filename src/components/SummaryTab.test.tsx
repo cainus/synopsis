@@ -48,6 +48,20 @@ describe("SummaryTab", () => {
     expect(onGenerate).toHaveBeenCalledOnce();
   });
 
+  it("shows spinner while loading with no output yet", () => {
+    render(
+      <SummaryTab
+        lines={[]}
+        loading={true}
+        done={false}
+        hasRepo={true}
+        onGenerate={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/claude is thinking/i)).toBeInTheDocument();
+    expect(document.querySelector(".spinner")).toBeInTheDocument();
+  });
+
   it("renders streamed lines as text", () => {
     render(
       <SummaryTab
@@ -62,7 +76,22 @@ describe("SummaryTab", () => {
     expect(screen.getByText(/Second line/)).toBeInTheDocument();
   });
 
-  it("shows a blinking cursor while loading", () => {
+  it("renders markdown formatting", () => {
+    render(
+      <SummaryTab
+        lines={["## Summary", "- item one", "- item two"]}
+        loading={false}
+        done={true}
+        hasRepo={true}
+        onGenerate={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("heading", { name: /summary/i })).toBeInTheDocument();
+    expect(screen.getByText("item one")).toBeInTheDocument();
+    expect(screen.getByText("item two")).toBeInTheDocument();
+  });
+
+  it("shows a blinking cursor while loading with partial output", () => {
     render(
       <SummaryTab
         lines={["partial output"]}
