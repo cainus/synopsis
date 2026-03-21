@@ -25,6 +25,15 @@ export function SummaryTab({ lines, loading, done, hasRepo, onGenerate }: Props)
     );
   }
 
+  if (loading && lines.length === 0) {
+    return (
+      <div className="thinking">
+        <span className="spinner" />
+        Claude is thinking…
+      </div>
+    );
+  }
+
   return (
     <div className="summary-tab">
       <pre className="summary-content">

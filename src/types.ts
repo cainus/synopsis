@@ -11,6 +11,7 @@ export interface DeltaResult {
 
 export interface TestCase {
   full_name: string;
+  file: string;
   behaviour_change: string;
 }
 

@@ -18,6 +18,7 @@ pub struct DeltaResult {
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct TestCase {
     pub full_name: String,
+    pub file: String,
     pub behaviour_change: String,
 }
 
@@ -74,7 +75,7 @@ pub fn pick_folder(window: tauri::Window) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
+pub async fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
     let branch = detect_default_branch(&repo_path);
     let range = format!("{}...HEAD", branch);
     let out = run_git(&repo_path, &["diff", "--numstat", &range])?;
@@ -173,6 +174,7 @@ fn is_test_file(path: &str) -> bool {
         || p.ends_with(".spec.jsx")
         || p.ends_with("_test.go")
         || p.ends_with("_test.rs")
+        || p.ends_with("_test.py")
         || p.ends_with("_spec.rb")
         || filename.starts_with("test_")
 }
@@ -186,6 +188,7 @@ fn extract_changed_tests(diff: &str) -> Vec<(String, String)> {
     let mut current_hunk: Vec<String> = Vec::new();
     let mut in_changed_hunk = false;
     let mut hunk_has_changes = false;
+    let mut prev_was_test_attr = false; // tracks #[test] attribute for Rust
 
     for line in diff.lines() {
         // Skip diff header lines
@@ -208,6 +211,7 @@ fn extract_changed_tests(diff: &str) -> Vec<(String, String)> {
             in_changed_hunk = true;
             hunk_has_changes = false;
             current_test = None;
+            prev_was_test_attr = false;
             continue;
         }
 
@@ -240,8 +244,23 @@ fn extract_changed_tests(diff: &str) -> Vec<(String, String)> {
             describe_stack.push((indent, name));
         }
 
-        // Detect it/test blocks
-        if let Some(name) = extract_block_name(trimmed, &["it(", "test(", "it.only(", "test.only(", "xit(", "xtest("]) {
+        // Track #[test] attribute for Rust
+        if trimmed == "#[test]" {
+            prev_was_test_attr = true;
+        } else if !trimmed.is_empty() && !trimmed.starts_with("//") && !trimmed.starts_with('#') {
+            // Any non-empty, non-comment, non-attribute line clears the flag after use
+            // (flag is consumed below when we see the fn)
+        }
+
+        // Detect it/test blocks (JS/TS style) and function-style tests (Go/Python/Rust)
+        let block_name = extract_block_name(trimmed, &["it(", "test(", "it.only(", "test.only(", "xit(", "xtest("])
+            .or_else(|| extract_fn_test_name(trimmed))
+            .or_else(|| {
+                // Rust: any fn after a #[test] attribute
+                if prev_was_test_attr { extract_rust_fn_name(trimmed) } else { None }
+            });
+        if let Some(name) = block_name {
+            prev_was_test_attr = false;
             let full_name = if describe_stack.is_empty() {
                 name.clone()
             } else {
@@ -287,6 +306,48 @@ fn extract_changed_tests(diff: &str) -> Vec<(String, String)> {
     deduped
 }
 
+/// Extract a Rust function name from a `fn` declaration line (any name).
+fn extract_rust_fn_name(trimmed: &str) -> Option<String> {
+    let rest = if trimmed.starts_with("async fn ") {
+        &trimmed["async fn ".len()..]
+    } else if trimmed.starts_with("fn ") {
+        &trimmed["fn ".len()..]
+    } else {
+        return None;
+    };
+    let name = rest.split('(').next()?.trim().to_string();
+    if name.is_empty() { None } else { Some(name) }
+}
+
+/// Extract test names from function-style test definitions (Go, Python, Rust).
+fn extract_fn_test_name(trimmed: &str) -> Option<String> {
+    // Go: func TestFoo(t *testing.T) / func BenchmarkFoo(b *testing.B)
+    if trimmed.starts_with("func Test") || trimmed.starts_with("func Benchmark") {
+        let rest = trimmed.strip_prefix("func ")?;
+        let name = rest.split('(').next()?.trim().to_string();
+        if !name.is_empty() {
+            return Some(name);
+        }
+    }
+    // Python: def test_foo(): / def test_foo(self):
+    if trimmed.starts_with("def test_") {
+        let rest = trimmed.strip_prefix("def ")?;
+        let name = rest.split(|c| c == '(' || c == ':').next()?.trim().to_string();
+        if !name.is_empty() {
+            return Some(name);
+        }
+    }
+    // Rust: fn test_foo() / fn should_foo()
+    if trimmed.starts_with("fn test_") || trimmed.starts_with("fn should_") {
+        let rest = trimmed.strip_prefix("fn ")?;
+        let name = rest.split('(').next()?.trim().to_string();
+        if !name.is_empty() {
+            return Some(name);
+        }
+    }
+    None
+}
+
 fn extract_block_name(trimmed: &str, prefixes: &[&str]) -> Option<String> {
     for prefix in prefixes {
         if trimmed.starts_with(prefix) {
@@ -330,29 +391,50 @@ fn extract_first_string(s: &str) -> Option<String> {
 }
 
 #[tauri::command]
-pub fn get_tests_result(repo_path: String) -> Result<TestsResult, String> {
+pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> {
     let branch = detect_default_branch(&repo_path);
     let range = format!("{}...HEAD", branch);
 
-    // Get list of changed files
-    let changed_files = run_git(&repo_path, &["diff", "--name-only", &range])?;
-    let test_files: Vec<&str> = changed_files
-        .lines()
-        .filter(|f| is_test_file(f))
+    // Collect changed files from both committed range and staging area so that
+    // staged-but-uncommitted test files are also analysed.
+    let committed = run_git(&repo_path, &["diff", "--name-only", &range]).unwrap_or_default();
+    let staged = run_git(&repo_path, &["diff", "--name-only", "--cached", &branch]).unwrap_or_default();
+
+    let mut seen = std::collections::HashSet::new();
+    let all_files: Vec<&str> = committed.lines()
+        .chain(staged.lines())
+        .filter(|l| !l.is_empty() && seen.insert(*l))
         .collect();
 
-    if test_files.is_empty() {
+    // Get diff for each test file and extract changed test names.
+    // Use `git diff <branch> -- <file>` so staged changes are included.
+    // Rust inline #[test] functions can live in any .rs file, so for .rs files
+    // we fetch the diff first and check whether it mentions #[test].
+    // all_tests entries: (test_name, hunk, file_path)
+    let mut all_tests: Vec<(String, String, String)> = Vec::new();
+    let mut any_test_file = false;
+    for file in all_files {
+        if is_test_file(file) {
+            any_test_file = true;
+            let diff = run_git(&repo_path, &["diff", &branch, "--", file])?;
+            for (name, hunk) in extract_changed_tests(&diff) {
+                all_tests.push((name, hunk, file.to_string()));
+            }
+        } else if file.ends_with(".rs") {
+            let diff = run_git(&repo_path, &["diff", &branch, "--", file])?;
+            if diff.contains("#[test]") {
+                any_test_file = true;
+                for (name, hunk) in extract_changed_tests(&diff) {
+                    all_tests.push((name, hunk, file.to_string()));
+                }
+            }
+        }
+    }
+
+    if !any_test_file {
         return Ok(TestsResult {
             test_cases: vec![],
         });
-    }
-
-    // Get diff for each test file and extract changed test names
-    let mut all_tests: Vec<(String, String)> = Vec::new();
-    for file in &test_files {
-        let diff = run_git(&repo_path, &["diff", &range, "--", file])?;
-        let tests = extract_changed_tests(&diff);
-        all_tests.extend(tests);
     }
 
     if all_tests.is_empty() {
@@ -361,11 +443,33 @@ pub fn get_tests_result(repo_path: String) -> Result<TestsResult, String> {
         });
     }
 
-    // Build prompt for Claude
+    // A test whose hunk has no removed lines is entirely new — no need to ask Claude.
+    let mut pre_classified: Vec<TestCase> = Vec::new();
+    let mut modified: Vec<(String, String, String)> = Vec::new(); // name, hunk, file
+
+    for (name, hunk, file) in all_tests {
+        let is_new = !hunk.lines().any(|l| l.starts_with('-'));
+        if is_new {
+            pre_classified.push(TestCase {
+                full_name: name,
+                file,
+                behaviour_change: "New test".to_string(),
+            });
+        } else {
+            modified.push((name, hunk, file));
+        }
+    }
+
+    // If all tests are new there's nothing for Claude to do.
+    if modified.is_empty() {
+        return Ok(TestsResult { test_cases: pre_classified });
+    }
+
+    // Build prompt for Claude (modified tests only)
     let mut prompt = String::from(
         "For each test case below, if the diff shows a behaviour change write ONE English sentence describing what changed. Otherwise write exactly \"No behaviour change\". Respond with ONLY a JSON array with objects {\"full_name\": string, \"behaviour_change\": string}. No markdown, no explanation.\n\nTests:\n",
     );
-    for (name, hunk) in &all_tests {
+    for (name, hunk, _) in &modified {
         prompt.push_str(&format!("\n---\nTest: {}\nDiff:\n{}\n", name, hunk));
     }
 
@@ -383,20 +487,43 @@ pub fn get_tests_result(repo_path: String) -> Result<TestsResult, String> {
 
     let response = String::from_utf8_lossy(&output.stdout).to_string();
 
-    // Parse JSON response from Claude
-    // Claude may wrap in ```json ... ``` so strip that
+    // Parse JSON response from Claude — may be wrapped in ```json ... ```
     let json_str = extract_json_array(&response);
-    let test_cases: Vec<TestCase> = serde_json::from_str(&json_str).unwrap_or_else(|_| {
-        // Fallback: return all tests with unknown status
-        all_tests
+
+    #[derive(serde::Deserialize)]
+    struct ClaudeEntry { full_name: String, behaviour_change: String }
+
+    let claude_entries: Vec<ClaudeEntry> = serde_json::from_str(&json_str).unwrap_or_default();
+
+    // Map Claude results back to TestCase, preserving file from modified list
+    let file_by_name: std::collections::HashMap<&str, &str> = modified
+        .iter()
+        .map(|(n, _, f)| (n.as_str(), f.as_str()))
+        .collect();
+
+    let mut claude_cases: Vec<TestCase> = claude_entries
+        .into_iter()
+        .map(|e| TestCase {
+            file: file_by_name.get(e.full_name.as_str()).unwrap_or(&"").to_string(),
+            full_name: e.full_name,
+            behaviour_change: e.behaviour_change,
+        })
+        .collect();
+
+    // Fallback: if Claude returned nothing, mark all modified tests as unable to determine
+    if claude_cases.is_empty() {
+        claude_cases = modified
             .iter()
-            .map(|(name, _)| TestCase {
+            .map(|(name, _, file)| TestCase {
                 full_name: name.clone(),
+                file: file.clone(),
                 behaviour_change: "Unable to determine".to_string(),
             })
-            .collect()
-    });
+            .collect();
+    }
 
+    let mut test_cases = pre_classified;
+    test_cases.extend(claude_cases);
     Ok(TestsResult { test_cases })
 }
 

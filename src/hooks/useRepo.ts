@@ -3,6 +3,22 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { DeltaResult, TestsResult } from "../types";
 
+const RECENTS_KEY = "synopsis_recent_paths";
+const MAX_RECENTS = 5;
+
+function loadRecents(): string[] {
+  try {
+    const saved = localStorage.getItem(RECENTS_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecents(paths: string[]) {
+  localStorage.setItem(RECENTS_KEY, JSON.stringify(paths));
+}
+
 interface Loading {
   delta: boolean;
   summary: boolean;
@@ -13,6 +29,7 @@ interface RepoState {
   repoPath: string | null;
   setRepoPath: (path: string) => void;
   refresh: () => void;
+  recentPaths: string[];
   deltaResult: DeltaResult | null;
   summaryLines: string[];
   summaryDone: boolean;
@@ -24,7 +41,9 @@ interface RepoState {
 }
 
 export function useRepo(): RepoState {
-  const [repoPath, setRepoPathState] = useState<string | null>(null);
+  const initialRecents = loadRecents();
+  const [recentPaths, setRecentPaths] = useState<string[]>(initialRecents);
+  const [repoPath, setRepoPathState] = useState<string | null>(initialRecents[0] ?? null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [deltaResult, setDeltaResult] = useState<DeltaResult | null>(null);
   const [summaryLines, setSummaryLines] = useState<string[]>([]);
@@ -55,6 +74,11 @@ export function useRepo(): RepoState {
   function setRepoPath(path: string) {
     setRepoPathState(path);
     resetState();
+    setRecentPaths((prev) => {
+      const updated = [path, ...prev.filter((p) => p !== path)].slice(0, MAX_RECENTS);
+      saveRecents(updated);
+      return updated;
+    });
   }
 
   function refresh() {
@@ -119,6 +143,7 @@ export function useRepo(): RepoState {
     repoPath,
     setRepoPath,
     refresh,
+    recentPaths,
     deltaResult,
     summaryLines,
     summaryDone,
