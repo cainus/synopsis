@@ -152,11 +152,17 @@ fn is_test_file(path: &str) -> bool {
     let p = path.to_lowercase();
     let filename = path.split('/').next_back().unwrap_or("").to_lowercase();
 
-    p.contains("/test/")
-        || p.contains("/tests/")
-        || p.contains("/__tests__/")
-        || p.contains("/spec/")
-        || p.contains("/specs/")
+    // Match directory segments anywhere in path (including at root)
+    let in_test_dir = |seg: &str| {
+        p.starts_with(&format!("{}/", seg))
+            || p.contains(&format!("/{}/", seg))
+    };
+
+    in_test_dir("test")
+        || in_test_dir("tests")
+        || in_test_dir("__tests__")
+        || in_test_dir("spec")
+        || in_test_dir("specs")
         || p.ends_with(".test.ts")
         || p.ends_with(".test.tsx")
         || p.ends_with(".test.js")
@@ -407,4 +413,262 @@ fn extract_json_array(s: &str) -> String {
         s
     };
     s.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── extract_first_string ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_extract_first_string_double_quotes() {
+        assert_eq!(
+            extract_first_string(r#""hello world", () => {"#),
+            Some("hello world".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_first_string_single_quotes() {
+        assert_eq!(
+            extract_first_string("'single quoted', () => {"),
+            Some("single quoted".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_first_string_backticks() {
+        assert_eq!(
+            extract_first_string("`template string`"),
+            Some("template string".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_first_string_escaped_quote() {
+        assert_eq!(
+            extract_first_string(r#""escaped \"inner\" quote""#),
+            Some(r#"escaped "inner" quote"#.into())
+        );
+    }
+
+    #[test]
+    fn test_extract_first_string_no_quote_returns_none() {
+        assert_eq!(extract_first_string("noQuoteHere"), None);
+    }
+
+    #[test]
+    fn test_extract_first_string_unterminated_returns_none() {
+        assert_eq!(extract_first_string(r#""unterminated"#), None);
+    }
+
+    #[test]
+    fn test_extract_first_string_leading_whitespace() {
+        assert_eq!(
+            extract_first_string(r#"   "leading space""#),
+            Some("leading space".into())
+        );
+    }
+
+    // ── extract_block_name ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_extract_block_name_describe() {
+        assert_eq!(
+            extract_block_name(r#"describe("UserService", () => {"#, &["describe("]),
+            Some("UserService".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_block_name_it() {
+        assert_eq!(
+            extract_block_name(r#"it("returns 404 when not found", () => {"#, &["it("]),
+            Some("returns 404 when not found".into())
+        );
+    }
+
+    #[test]
+    fn test_extract_block_name_no_match_returns_none() {
+        assert_eq!(
+            extract_block_name(r#"const x = 1;"#, &["describe(", "it("]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_extract_block_name_picks_correct_prefix() {
+        assert_eq!(
+            extract_block_name(r#"test("does something")"#, &["describe(", "it(", "test("]),
+            Some("does something".into())
+        );
+    }
+
+    // ── is_test_file ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_is_test_file_dot_test_ts() {
+        assert!(is_test_file("src/utils.test.ts"));
+    }
+
+    #[test]
+    fn test_is_test_file_dot_spec_tsx() {
+        assert!(is_test_file("src/components/Button.spec.tsx"));
+    }
+
+    #[test]
+    fn test_is_test_file_jest_tests_dir() {
+        assert!(is_test_file("src/__tests__/auth.ts"));
+    }
+
+    #[test]
+    fn test_is_test_file_tests_dir() {
+        assert!(is_test_file("tests/integration/login.ts"));
+    }
+
+    #[test]
+    fn test_is_test_file_go_test() {
+        assert!(is_test_file("pkg/parser/parser_test.go"));
+    }
+
+    #[test]
+    fn test_is_test_file_rust_test() {
+        assert!(is_test_file("src/lib_test.rs"));
+    }
+
+    #[test]
+    fn test_is_test_file_python_prefix() {
+        assert!(is_test_file("test_utils.py"));
+    }
+
+    #[test]
+    fn test_is_test_file_regular_source_file() {
+        assert!(!is_test_file("src/utils.ts"));
+    }
+
+    #[test]
+    fn test_is_test_file_regular_tsx() {
+        assert!(!is_test_file("src/components/Button.tsx"));
+    }
+
+    #[test]
+    fn test_is_test_file_readme() {
+        assert!(!is_test_file("README.md"));
+    }
+
+    // ── extract_json_array ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_extract_json_array_bare() {
+        let input = r#"[{"full_name":"foo","behaviour_change":"bar"}]"#;
+        assert_eq!(extract_json_array(input), input);
+    }
+
+    #[test]
+    fn test_extract_json_array_strips_markdown_fence() {
+        let input = "```json\n[{\"full_name\":\"foo\",\"behaviour_change\":\"bar\"}]\n```";
+        assert_eq!(
+            extract_json_array(input),
+            r#"[{"full_name":"foo","behaviour_change":"bar"}]"#
+        );
+    }
+
+    #[test]
+    fn test_extract_json_array_leading_text() {
+        let input = "Here is the result:\n[{\"a\":\"b\"}]";
+        assert_eq!(extract_json_array(input), r#"[{"a":"b"}]"#);
+    }
+
+    // ── extract_changed_tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_extract_changed_tests_simple_it_block() {
+        let diff = r#"diff --git a/foo.test.ts b/foo.test.ts
+@@ -1,5 +1,5 @@
+ describe("MyService", () => {
+-  it("returns null on error", () => {
++  it("returns null on error", () => {
+-    expect(service.get()).toBeNull();
++    expect(service.get()).toBeNull();
+   });
+ });"#;
+        let tests = extract_changed_tests(diff);
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].0, "MyService > returns null on error");
+    }
+
+    #[test]
+    fn test_extract_changed_tests_nested_describe() {
+        let diff = r#"@@ -1,8 +1,8 @@
+ describe("Auth", () => {
+   describe("login", () => {
+     it("rejects bad password", () => {
+-      expect(login("x")).toBe(false);
++      expect(login("x")).rejects.toThrow();
+     });
+   });
+ });"#;
+        let tests = extract_changed_tests(diff);
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].0, "Auth > login > rejects bad password");
+    }
+
+    #[test]
+    fn test_extract_changed_tests_unchanged_test_not_returned() {
+        // No +/- lines inside the it block — should not be returned
+        let diff = r#"@@ -1,5 +1,5 @@
+ describe("Foo", () => {
+   it("does nothing", () => {
+     expect(true).toBe(true);
+   });
+ });"#;
+        let tests = extract_changed_tests(diff);
+        assert_eq!(tests.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_changed_tests_multiple_tests_in_file() {
+        let diff = r#"@@ -1,10 +1,10 @@
+ describe("Parser", () => {
+   it("handles empty input", () => {
+-    expect(parse("")).toBe(null);
++    expect(parse("")).toStrictEqual({});
+   });
+   it("handles valid input", () => {
+-    expect(parse("ok")).toBe("ok");
++    expect(parse("ok")).toEqual({ value: "ok" });
+   });
+ });"#;
+        let tests = extract_changed_tests(diff);
+        assert_eq!(tests.len(), 2);
+        assert_eq!(tests[0].0, "Parser > handles empty input");
+        assert_eq!(tests[1].0, "Parser > handles valid input");
+    }
+
+    #[test]
+    fn test_extract_changed_tests_top_level_test_no_describe() {
+        let diff = r#"@@ -1,3 +1,3 @@
+ test("standalone test", () => {
+-  expect(1).toBe(1);
++  expect(1).toBe(2);
+ });"#;
+        let tests = extract_changed_tests(diff);
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].0, "standalone test");
+    }
+
+    #[test]
+    fn test_extract_changed_tests_single_quoted_names() {
+        let diff = r#"@@ -1,3 +1,3 @@
+ describe('outer', () => {
+   it('inner test', () => {
+-    return 1;
++    return 2;
+   });
+ });"#;
+        let tests = extract_changed_tests(diff);
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].0, "outer > inner test");
+    }
 }
