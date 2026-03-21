@@ -1,0 +1,29 @@
+src-tauri/src/git.rs
+  bca8bdd9760f53c7 80,109,395-398
+spec/summary-tab.md
+  bca8bdd9760f53c7 13
+spec/tests-tab.md
+  bca8bdd9760f53c7 35,38
+spec/delta-tab.md
+  bca8bdd9760f53c7 25,28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "eb9594ca413bfa75f30e0de945b4db85980877e0",
+  "prompts": {
+    "bca8bdd9760f53c7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f32fd2f-cd80-444c-90f0-31526c0967dd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Greggory Caines <gregg@caines.ca>",
+      "messages": [],
+      "total_additions": 11,
+      "total_deletions": 21,
+      "accepted_lines": 11,
+      "overriden_lines": 0
+    }
+  }
+}
