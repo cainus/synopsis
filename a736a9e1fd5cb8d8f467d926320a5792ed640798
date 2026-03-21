@@ -1,0 +1,23 @@
+README.md
+  8d5a80eb1fc12869 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "a736a9e1fd5cb8d8f467d926320a5792ed640798",
+  "prompts": {
+    "8d5a80eb1fc12869": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d949f361-840b-41e0-aac0-70af7a2b3c14",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Greggory Caines <gregg@caines.ca>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
