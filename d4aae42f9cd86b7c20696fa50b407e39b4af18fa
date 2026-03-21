@@ -1,0 +1,29 @@
+src/App.tsx
+  8d5a80eb1fc12869 16,40
+src/hooks/useRepo.ts
+  8d5a80eb1fc12869 15,28,45,55-63,66,74,121
+src/components/FolderPicker.tsx
+  8d5a80eb1fc12869 8,11,28-33
+src/App.css
+  8d5a80eb1fc12869 59-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "d4aae42f9cd86b7c20696fa50b407e39b4af18fa",
+  "prompts": {
+    "8d5a80eb1fc12869": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d949f361-840b-41e0-aac0-70af7a2b3c14",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Greggory Caines <gregg@caines.ca>",
+      "messages": [],
+      "total_additions": 39,
+      "total_deletions": 7,
+      "accepted_lines": 39,
+      "overriden_lines": 0
+    }
+  }
+}
