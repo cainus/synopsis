@@ -297,16 +297,70 @@ body {
 /* Summary tab */
 .summary-tab {
   height: 100%;
+  max-width: 780px;
 }
 
 .summary-content {
-  font-family: "SF Mono", "Fira Code", monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
+  font-size: 14px;
+  line-height: 1.7;
   color: #ddd;
 }
+
+.summary-content p { margin: 0 0 12px; }
+.summary-content p:last-child { margin-bottom: 0; }
+
+.summary-content h1,
+.summary-content h2,
+.summary-content h3 {
+  color: #fff;
+  font-weight: 600;
+  margin: 20px 0 8px;
+}
+.summary-content h1 { font-size: 18px; }
+.summary-content h2 { font-size: 16px; }
+.summary-content h3 { font-size: 14px; }
+
+.summary-content ul,
+.summary-content ol {
+  padding-left: 20px;
+  margin: 0 0 12px;
+}
+.summary-content li { margin: 4px 0; }
+
+.summary-content code {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 12px;
+  background: #2a2a2a;
+  border: 1px solid #333;
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: #e8e8e8;
+}
+
+.summary-content pre {
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+}
+.summary-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+}
+
+.summary-content blockquote {
+  border-left: 3px solid #444;
+  margin: 0 0 12px;
+  padding-left: 12px;
+  color: #aaa;
+}
+
+.summary-content strong { color: #fff; }
+.summary-content em { color: #bbb; }
 
 .cursor {
   animation: blink 0.8s step-end infinite;

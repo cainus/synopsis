@@ -1,4 +1,5 @@
 import { useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 
 interface Props {
   lines: string[];
@@ -34,12 +35,14 @@ export function SummaryTab({ lines, loading, done, hasRepo, onGenerate }: Props)
     );
   }
 
+  const text = lines.join("\n");
+
   return (
     <div className="summary-tab">
-      <pre className="summary-content">
-        {lines.join("\n")}
+      <div className="summary-content">
+        <ReactMarkdown>{text}</ReactMarkdown>
         {loading && <span className="cursor">▌</span>}
-      </pre>
+      </div>
       <div ref={bottomRef} />
     </div>
   );
