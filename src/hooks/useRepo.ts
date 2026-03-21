@@ -12,6 +12,7 @@ interface Loading {
 interface RepoState {
   repoPath: string | null;
   setRepoPath: (path: string) => void;
+  refresh: () => void;
   deltaResult: DeltaResult | null;
   summaryLines: string[];
   summaryDone: boolean;
@@ -24,6 +25,7 @@ interface RepoState {
 
 export function useRepo(): RepoState {
   const [repoPath, setRepoPathState] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [deltaResult, setDeltaResult] = useState<DeltaResult | null>(null);
   const [summaryLines, setSummaryLines] = useState<string[]>([]);
   const [summaryDone, setSummaryDone] = useState(false);
@@ -40,8 +42,7 @@ export function useRepo(): RepoState {
   const unlistenSummaryChunk = useRef<UnlistenFn | null>(null);
   const unlistenSummaryDone = useRef<UnlistenFn | null>(null);
 
-  function setRepoPath(path: string) {
-    setRepoPathState(path);
+  function resetState() {
     setDeltaResult(null);
     setSummaryLines([]);
     setSummaryDone(false);
@@ -51,7 +52,18 @@ export function useRepo(): RepoState {
     testsFetched.current = false;
   }
 
-  // Eagerly fetch delta when repoPath changes
+  function setRepoPath(path: string) {
+    setRepoPathState(path);
+    resetState();
+  }
+
+  function refresh() {
+    if (!repoPath) return;
+    resetState();
+    setRefreshKey((k) => k + 1);
+  }
+
+  // Eagerly fetch delta when repoPath changes or refresh is triggered
   useEffect(() => {
     if (!repoPath) return;
     setLoading((l) => ({ ...l, delta: true }));
@@ -59,7 +71,7 @@ export function useRepo(): RepoState {
       .then((result) => setDeltaResult(result))
       .catch((e) => setError(String(e)))
       .finally(() => setLoading((l) => ({ ...l, delta: false })));
-  }, [repoPath]);
+  }, [repoPath, refreshKey]);
 
   function fetchSummary() {
     if (!repoPath || summaryFetched.current) return;
@@ -106,6 +118,7 @@ export function useRepo(): RepoState {
   return {
     repoPath,
     setRepoPath,
+    refresh,
     deltaResult,
     summaryLines,
     summaryDone,

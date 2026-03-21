@@ -13,6 +13,7 @@ function App() {
   const {
     repoPath,
     setRepoPath,
+    refresh,
     deltaResult,
     summaryLines,
     summaryDone,
@@ -36,7 +37,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>Synopsis</h1>
-        <FolderPicker repoPath={repoPath} onPick={setRepoPath} />
+        <FolderPicker repoPath={repoPath} onPick={setRepoPath} onRefresh={refresh} />
       </header>
 
       {error && <div className="error-bar">{error}</div>}
