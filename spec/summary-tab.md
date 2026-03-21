@@ -10,7 +10,7 @@ Once generated, the summary is cached for the session. Clicking **↺** (refresh
 
 ## How it works
 
-1. Run `git diff <default-branch>...HEAD` to get the full patch
+1. Run `git diff <default-branch>` to get the full patch (two-dot, includes staged and unstaged changes)
 2. If the diff is empty, display "No changes found vs the default branch" immediately
 3. Otherwise pipe the diff into `claude -p` with this prompt:
 

@@ -32,11 +32,10 @@ No behaviour change.
 ### 1. Find changed test files
 
 ```
-git diff --name-only <default-branch>...HEAD   # committed changes
-git diff --name-only --cached <default-branch> # staged-but-uncommitted changes
+git diff --name-only <default-branch>
 ```
 
-Both lists are unioned so that staged test files are analysed even before they are committed. Filter the combined result to files matching the test file heuristics (see below).
+A two-dot (working-tree) diff is used so that staged, unstaged, and committed changes are all included, and so that changes are visible even when HEAD is the default branch. Filter the result to files matching the test file heuristics (see below).
 
 ### 2. Get the diff for each test file
 

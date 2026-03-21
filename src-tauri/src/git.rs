@@ -77,8 +77,7 @@ pub fn pick_folder(window: tauri::Window) -> Result<(), String> {
 #[tauri::command]
 pub async fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
     let branch = detect_default_branch(&repo_path);
-    let range = format!("{}...HEAD", branch);
-    let out = run_git(&repo_path, &["diff", "--numstat", &range])?;
+    let out = run_git(&repo_path, &["diff", "--numstat", &branch])?;
 
     let mut files = Vec::new();
     for line in out.lines() {
@@ -104,11 +103,10 @@ pub async fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
 #[tauri::command]
 pub async fn get_summary(repo_path: String, window: tauri::Window) -> Result<(), String> {
     let branch = detect_default_branch(&repo_path);
-    let range = format!("{}...HEAD", branch);
 
     // Get the diff
     let diff_output = Command::new("git")
-        .args(["-C", &repo_path, "diff", &range])
+        .args(["-C", &repo_path, "diff", &branch])
         .output()
         .map_err(|e| format!("Failed to run git diff: {}", e))?;
 
@@ -393,18 +391,11 @@ fn extract_first_string(s: &str) -> Option<String> {
 #[tauri::command]
 pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> {
     let branch = detect_default_branch(&repo_path);
-    let range = format!("{}...HEAD", branch);
 
-    // Collect changed files from both committed range and staging area so that
-    // staged-but-uncommitted test files are also analysed.
-    let committed = run_git(&repo_path, &["diff", "--name-only", &range]).unwrap_or_default();
-    let staged = run_git(&repo_path, &["diff", "--name-only", "--cached", &branch]).unwrap_or_default();
-
-    let mut seen = std::collections::HashSet::new();
-    let all_files: Vec<&str> = committed.lines()
-        .chain(staged.lines())
-        .filter(|l| !l.is_empty() && seen.insert(*l))
-        .collect();
+    // Two-dot diff against the base branch covers committed, staged, and unstaged
+    // changes — and works correctly when HEAD *is* the base branch.
+    let changed_files = run_git(&repo_path, &["diff", "--name-only", &branch]).unwrap_or_default();
+    let all_files: Vec<&str> = changed_files.lines().filter(|l| !l.is_empty()).collect();
 
     // Get diff for each test file and extract changed test names.
     // Use `git diff <branch> -- <file>` so staged changes are included.

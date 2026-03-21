@@ -22,10 +22,10 @@ Total (3 files)            +43     -5
 ## Git command
 
 ```
-git diff --numstat <default-branch>...HEAD
+git diff --numstat <default-branch>
 ```
 
-The three-dot range (`...`) compares the current branch against the merge base, not the tip of the default branch. This ensures the delta only reflects what this branch introduced, even if the default branch has moved on since the branch was created.
+A two-dot (working-tree) diff is used so that staged and unstaged local changes are included, and so that changes are visible even when HEAD is the default branch itself (e.g. working directly on main).
 
 ## Empty states
 
