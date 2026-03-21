@@ -1,0 +1,43 @@
+src-tauri/src/git.rs
+  8d5a80eb1fc12869 155-165,417-674
+vite.config.ts
+  8d5a80eb1fc12869 14-18
+src/components/DeltaTab.test.tsx
+  8d5a80eb1fc12869 1-67
+tsconfig.json
+  8d5a80eb1fc12869 17-18
+src/test/mocks.ts
+  8d5a80eb1fc12869 1-17
+src/components/TestsTab.test.tsx
+  8d5a80eb1fc12869 1-70
+src/components/SummaryTab.test.tsx
+  8d5a80eb1fc12869 1-90
+src/test/setup.ts
+  8d5a80eb1fc12869 1-4
+src/components/TabBar.test.tsx
+  8d5a80eb1fc12869 1-36
+src/components/FolderPicker.test.tsx
+  8d5a80eb1fc12869 1-75
+package.json
+  8d5a80eb1fc12869 10-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "9d2b5903f9a139ba6ea822fb35d66c3344df7924",
+  "prompts": {
+    "8d5a80eb1fc12869": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d949f361-840b-41e0-aac0-70af7a2b3c14",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Greggory Caines <gregg@caines.ca>",
+      "messages": [],
+      "total_additions": 643,
+      "total_deletions": 12,
+      "accepted_lines": 638,
+      "overriden_lines": 0
+    }
+  }
+}
