@@ -281,6 +281,33 @@ body {
   color: #ccc;
 }
 
+.file-badge-cell {
+  width: 1px;
+  white-space: nowrap;
+  padding-right: 12px;
+}
+
+.file-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+.badge-tracked {
+  background: #2a3a4a;
+  color: #6aadcf;
+}
+
+.badge-untracked {
+  background: #3a3020;
+  color: #c9a84c;
+}
+
 .total-label {
   color: #666;
   font-family: -apple-system, sans-serif;
@@ -361,6 +388,7 @@ body {
 
 .summary-content strong { color: #fff; }
 .summary-content em { color: #bbb; }
+
 
 .cursor {
   animation: blink 0.8s step-end infinite;

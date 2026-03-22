@@ -2,10 +2,12 @@ export interface FileStat {
   path: string;
   added: number;
   removed: number;
+  untracked: boolean;
 }
 
 export interface DeltaResult {
   default_branch: string;
+  current_branch: string;
   files: FileStat[];
 }
 

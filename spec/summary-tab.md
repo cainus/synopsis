@@ -16,7 +16,7 @@ Once generated, the summary is cached for the session. Clicking **↺** (refresh
 
    > Summarize these code changes concisely for a developer. Focus on what changed and why it matters. Be brief.
 
-4. Stream stdout from the Claude process line by line into the UI
+4. Stream stdout from the Claude process line by line into the UI; output is rendered as Markdown
 5. Emit a done signal when the process exits
 
 ## Streaming

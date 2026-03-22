@@ -8,10 +8,14 @@ interface Props {
 export function DeltaTab({ result, loading }: Props) {
   if (loading) return <div className="status">Loading diff…</div>;
   if (!result) return <div className="status empty">Pick a repo folder to see changes.</div>;
+  const onDefaultBranch = result.current_branch === result.default_branch;
+
   if (result.files.length === 0)
     return (
       <div className="status empty">
-        No changes vs <code>{result.default_branch}</code>.
+        {onDefaultBranch
+          ? <>No uncommitted changes on <code>{result.default_branch}</code>.</>
+          : <>No changes vs <code>{result.default_branch}</code>.</>}
       </div>
     );
 
@@ -21,12 +25,15 @@ export function DeltaTab({ result, loading }: Props) {
   return (
     <div className="delta-tab">
       <div className="branch-label">
-        Changes vs <code>{result.default_branch}</code>
+        {onDefaultBranch
+          ? <>Uncommitted changes on <code>{result.current_branch}</code></>
+          : <>Changes vs <code>{result.default_branch}</code></>}
       </div>
       <table className="delta-table">
         <thead>
           <tr>
             <th>File</th>
+            <th></th>
             <th>Added</th>
             <th>Removed</th>
           </tr>
@@ -35,6 +42,11 @@ export function DeltaTab({ result, loading }: Props) {
           {result.files.map((f) => (
             <tr key={f.path}>
               <td className="file-path">{f.path}</td>
+              <td className="file-badge-cell">
+                <span className={`file-badge ${f.untracked ? "badge-untracked" : "badge-tracked"}`}>
+                  {f.untracked ? "untracked" : "tracked"}
+                </span>
+              </td>
               <td className="added">+{f.added}</td>
               <td className="removed">-{f.removed}</td>
             </tr>
@@ -42,7 +54,7 @@ export function DeltaTab({ result, loading }: Props) {
         </tbody>
         <tfoot>
           <tr>
-            <td className="total-label">Total ({result.files.length} files)</td>
+            <td className="total-label" colSpan={2}>Total ({result.files.length} files)</td>
             <td className="added">+{totalAdded}</td>
             <td className="removed">-{totalRemoved}</td>
           </tr>

@@ -7,11 +7,13 @@ pub struct FileStat {
     pub path: String,
     pub added: u32,
     pub removed: u32,
+    pub untracked: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct DeltaResult {
     pub default_branch: String,
+    pub current_branch: String,
     pub files: Vec<FileStat>,
 }
 
@@ -76,8 +78,14 @@ pub fn pick_folder(window: tauri::Window) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
-    let branch = detect_default_branch(&repo_path);
-    let out = run_git(&repo_path, &["diff", "--numstat", &branch])?;
+    let default_branch = detect_default_branch(&repo_path);
+    let current_branch = run_git(&repo_path, &["rev-parse", "--abbrev-ref", "HEAD"])
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+
+    // Two-dot diff covers committed, staged, and unstaged changes — and works
+    // correctly when HEAD is the default branch itself (e.g. working on main).
+    let out = run_git(&repo_path, &["diff", "--numstat", &default_branch])?;
 
     let mut files = Vec::new();
     for line in out.lines() {
@@ -90,12 +98,35 @@ pub async fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
                 path,
                 added,
                 removed,
+                untracked: false,
+            });
+        }
+    }
+
+    // When on the default branch, also include untracked files (new files not yet staged).
+    if current_branch == default_branch {
+        let untracked = run_git(
+            &repo_path,
+            &["ls-files", "--others", "--exclude-standard"],
+        )
+        .unwrap_or_default();
+        for path in untracked.lines().filter(|l| !l.is_empty()) {
+            let full_path = std::path::Path::new(&repo_path).join(path);
+            let added = std::fs::read_to_string(&full_path)
+                .map(|s| s.lines().count() as u32)
+                .unwrap_or(0);
+            files.push(FileStat {
+                path: path.to_string(),
+                added,
+                removed: 0,
+                untracked: true,
             });
         }
     }
 
     Ok(DeltaResult {
-        default_branch: branch,
+        default_branch,
+        current_branch,
         files,
     })
 }
@@ -104,7 +135,7 @@ pub async fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
 pub async fn get_summary(repo_path: String, window: tauri::Window) -> Result<(), String> {
     let branch = detect_default_branch(&repo_path);
 
-    // Get the diff
+    // Two-dot diff — same approach as get_delta
     let diff_output = Command::new("git")
         .args(["-C", &repo_path, "diff", &branch])
         .output()
@@ -390,11 +421,10 @@ fn extract_first_string(s: &str) -> Option<String> {
 
 #[tauri::command]
 pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> {
-    let branch = detect_default_branch(&repo_path);
+    let default_branch = detect_default_branch(&repo_path);
 
-    // Two-dot diff against the base branch covers committed, staged, and unstaged
-    // changes — and works correctly when HEAD *is* the base branch.
-    let changed_files = run_git(&repo_path, &["diff", "--name-only", &branch]).unwrap_or_default();
+    // Two-dot diff — same approach as get_delta
+    let changed_files = run_git(&repo_path, &["diff", "--name-only", &default_branch]).unwrap_or_default();
     let all_files: Vec<&str> = changed_files.lines().filter(|l| !l.is_empty()).collect();
 
     // Get diff for each test file and extract changed test names.
@@ -404,15 +434,17 @@ pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> 
     // all_tests entries: (test_name, hunk, file_path)
     let mut all_tests: Vec<(String, String, String)> = Vec::new();
     let mut any_test_file = false;
+    let diff_ref: &str = &default_branch;
+
     for file in all_files {
         if is_test_file(file) {
             any_test_file = true;
-            let diff = run_git(&repo_path, &["diff", &branch, "--", file])?;
+            let diff = run_git(&repo_path, &["diff", diff_ref, "--", file])?;
             for (name, hunk) in extract_changed_tests(&diff) {
                 all_tests.push((name, hunk, file.to_string()));
             }
         } else if file.ends_with(".rs") {
-            let diff = run_git(&repo_path, &["diff", &branch, "--", file])?;
+            let diff = run_git(&repo_path, &["diff", diff_ref, "--", file])?;
             if diff.contains("#[test]") {
                 any_test_file = true;
                 for (name, hunk) in extract_changed_tests(&diff) {
