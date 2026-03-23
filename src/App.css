@@ -402,8 +402,20 @@ body {
 /* Diagrams tab */
 .diagrams-tab {
   display: flex;
-  gap: 24px;
+  flex-direction: column;
+  gap: 20px;
   height: 100%;
+}
+
+.diagrams-split {
+  display: flex;
+  gap: 20px;
+  flex: 1;
+  min-height: 0;
+}
+
+.diagrams-combined {
+  flex: none;
 }
 
 .diagram-panel {
@@ -414,6 +426,9 @@ body {
 }
 
 .diagram-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -421,6 +436,26 @@ body {
   color: #666;
   margin-bottom: 10px;
 }
+
+.diagram-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: #555;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 3px;
+}
+.legend-added   { background: #4caf50; }
+.legend-modified { background: #ffb300; }
+.legend-removed { background: #f44336; }
 
 .diagram-render {
   flex: 1;
@@ -432,6 +467,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 180px;
 }
 
 .diagram-render svg {

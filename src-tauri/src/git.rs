@@ -33,6 +33,7 @@ pub struct TestsResult {
 pub struct DiagramsResult {
     pub before: String,
     pub after: String,
+    pub combined: String,
 }
 
 fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
@@ -617,21 +618,31 @@ pub async fn get_diagrams(repo_path: String) -> Result<DiagramsResult, String> {
 
     if diff_output.stdout.is_empty() {
         let empty = "graph LR\n    A[No changes]".to_string();
-        return Ok(DiagramsResult { before: empty.clone(), after: empty });
+        return Ok(DiagramsResult { before: empty.clone(), after: empty.clone(), combined: empty });
     }
 
-    let prompt = r#"Analyze these code changes and produce exactly two Mermaid flowchart diagrams.
+    let prompt = r#"Analyze these code changes and produce three Mermaid flowchart diagrams.
 
-"before": a flowchart showing the key components/functions/modules that were CHANGED and how they related to each other BEFORE this diff.
-"after": a flowchart showing those same elements and how they relate AFTER this diff, including any new nodes introduced.
+"before": a flowchart showing the key components/functions/modules that were CHANGED and how they related BEFORE this diff.
+"after": a flowchart showing those same elements and their new relationships AFTER this diff, including any new nodes.
+"combined": a single flowchart showing everything — use classDef to colour-code nodes:
+  - nodes that are NEW (only in after): class "added"  → fill:#1a3a1a,stroke:#4caf50,color:#ccc
+  - nodes that are REMOVED (only in before): class "removed" → fill:#3a1a1a,stroke:#f44336,color:#ccc
+  - nodes that CHANGED (present in both but modified): class "modified" → fill:#3a2e00,stroke:#ffb300,color:#ccc
+  - nodes that are UNCHANGED: no class
+  Include these exact classDef lines at the top of the combined diagram:
+    classDef added fill:#1a3a1a,stroke:#4caf50,color:#ccc
+    classDef removed fill:#3a1a1a,stroke:#f44336,color:#ccc
+    classDef modified fill:#3a2e00,stroke:#ffb300,color:#ccc
 
 Rules:
-- Use `graph LR` direction
-- Only include nodes directly involved in the changes (keep it focused, max ~10 nodes each)
+- Use `graph LR` direction for all three
+- Keep it focused, max ~12 nodes each
 - Use short readable node labels
-- Respond with ONLY a JSON object: {"before": "...", "after": "..."}
-- The values must be valid Mermaid graph strings
-- No markdown fences, no explanation"#;
+- Node IDs must be alphanumeric (no spaces or special chars)
+- Respond with ONLY a JSON object: {"before": "...", "after": "...", "combined": "..."}
+- Values must be valid Mermaid graph strings with no markdown fences
+- No explanation"#;
 
     let mut child = Command::new("claude")
         .args(["-p", prompt])
@@ -655,13 +666,13 @@ Rules:
     let json_str = extract_json_object(&response);
 
     #[derive(serde::Deserialize)]
-    struct ClaudeResponse { before: String, after: String }
+    struct ClaudeResponse { before: String, after: String, combined: String }
 
     let parsed: ClaudeResponse = serde_json::from_str(&json_str).map_err(|e| {
         format!("Failed to parse Claude response: {}\nRaw: {}", e, response)
     })?;
 
-    Ok(DiagramsResult { before: parsed.before, after: parsed.after })
+    Ok(DiagramsResult { before: parsed.before, after: parsed.after, combined: parsed.combined })
 }
 
 fn extract_json_object(s: &str) -> String {

@@ -24,6 +24,7 @@ export interface TestsResult {
 export interface DiagramsResult {
   before: string;
   after: string;
+  combined: string;
 }
 
 export type TabName = "delta" | "summary" | "tests" | "diagrams";
