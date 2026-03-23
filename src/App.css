@@ -419,6 +419,15 @@ body {
   border-bottom: 1px solid #2a2a2a;
 }
 
+.test-describe {
+  padding: 6px 12px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #666;
+}
+
 .test-case {
   padding: 10px 12px;
   background: #1e1e1e;

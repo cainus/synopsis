@@ -210,6 +210,13 @@ fn is_test_file(path: &str) -> bool {
 
 /// Extract changed test names from a diff patch.
 /// Returns a list of (full_name, hunk_context) tuples.
+/// Extract all test names from a plain file (no diff). Used for untracked files.
+fn extract_tests_from_content(content: &str) -> Vec<(String, String)> {
+    // Synthesise a fake diff where every line is an addition so the parser works.
+    let fake_diff = format!("@@\n{}", content.lines().map(|l| format!("+{}", l)).collect::<Vec<_>>().join("\n"));
+    extract_changed_tests(&fake_diff)
+}
+
 fn extract_changed_tests(diff: &str) -> Vec<(String, String)> {
     let mut results = Vec::new();
     let mut describe_stack: Vec<(usize, String)> = Vec::new(); // (indent, name)
@@ -425,7 +432,11 @@ pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> 
 
     // Two-dot diff — same approach as get_delta
     let changed_files = run_git(&repo_path, &["diff", "--name-only", &default_branch]).unwrap_or_default();
-    let all_files: Vec<&str> = changed_files.lines().filter(|l| !l.is_empty()).collect();
+    let untracked_files = run_git(&repo_path, &["ls-files", "--others", "--exclude-standard"]).unwrap_or_default();
+    let all_files: Vec<&str> = changed_files.lines()
+        .chain(untracked_files.lines())
+        .filter(|l| !l.is_empty())
+        .collect();
 
     // Get diff for each test file and extract changed test names.
     // Use `git diff <branch> -- <file>` so staged changes are included.
@@ -434,21 +445,45 @@ pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> 
     // all_tests entries: (test_name, hunk, file_path)
     let mut all_tests: Vec<(String, String, String)> = Vec::new();
     let mut any_test_file = false;
-    let diff_ref: &str = &default_branch;
+    let untracked_set: std::collections::HashSet<&str> = untracked_files.lines()
+        .filter(|l| !l.is_empty())
+        .collect();
 
     for file in all_files {
+        let is_untracked = untracked_set.contains(file);
+
         if is_test_file(file) {
             any_test_file = true;
-            let diff = run_git(&repo_path, &["diff", diff_ref, "--", file])?;
-            for (name, hunk) in extract_changed_tests(&diff) {
-                all_tests.push((name, hunk, file.to_string()));
-            }
-        } else if file.ends_with(".rs") {
-            let diff = run_git(&repo_path, &["diff", diff_ref, "--", file])?;
-            if diff.contains("#[test]") {
-                any_test_file = true;
+            if is_untracked {
+                // Untracked file: read it directly, all tests in it are new
+                let full_path = std::path::Path::new(&repo_path).join(file);
+                let content = std::fs::read_to_string(&full_path).unwrap_or_default();
+                for (name, _) in extract_tests_from_content(&content) {
+                    all_tests.push((name, String::new(), file.to_string()));
+                }
+            } else {
+                let diff = run_git(&repo_path, &["diff", &default_branch, "--", file])?;
                 for (name, hunk) in extract_changed_tests(&diff) {
                     all_tests.push((name, hunk, file.to_string()));
+                }
+            }
+        } else if file.ends_with(".rs") {
+            if is_untracked {
+                let full_path = std::path::Path::new(&repo_path).join(file);
+                let content = std::fs::read_to_string(&full_path).unwrap_or_default();
+                if content.contains("#[test]") {
+                    any_test_file = true;
+                    for (name, _) in extract_tests_from_content(&content) {
+                        all_tests.push((name, String::new(), file.to_string()));
+                    }
+                }
+            } else {
+                let diff = run_git(&repo_path, &["diff", &default_branch, "--", file])?;
+                if diff.contains("#[test]") {
+                    any_test_file = true;
+                    for (name, hunk) in extract_changed_tests(&diff) {
+                        all_tests.push((name, hunk, file.to_string()));
+                    }
                 }
             }
         }

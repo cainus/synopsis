@@ -4,9 +4,10 @@ import type { DeltaResult } from "../types";
 
 const result: DeltaResult = {
   default_branch: "main",
+  current_branch: "feature/foo",
   files: [
-    { path: "src/app.ts", added: 7, removed: 3 },
-    { path: "src/utils.ts", added: 4, removed: 5 },
+    { path: "src/app.ts", added: 7, removed: 3, untracked: false },
+    { path: "src/utils.ts", added: 4, removed: 5, untracked: false },
   ],
 };
 
@@ -24,7 +25,7 @@ describe("DeltaTab", () => {
   it("shows empty state when there are no changed files", () => {
     render(
       <DeltaTab
-        result={{ default_branch: "main", files: [] }}
+        result={{ default_branch: "main", current_branch: "feature/foo", files: [] }}
         loading={false}
       />
     );
