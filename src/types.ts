@@ -21,4 +21,9 @@ export interface TestsResult {
   test_cases: TestCase[];
 }
 
-export type TabName = "delta" | "summary" | "tests";
+export interface DiagramsResult {
+  before: string;
+  after: string;
+}
+
+export type TabName = "delta" | "summary" | "tests" | "diagrams";

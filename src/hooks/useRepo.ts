@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { DeltaResult, TestsResult } from "../types";
+import type { DeltaResult, DiagramsResult, TestsResult } from "../types";
 
 const RECENTS_KEY = "synopsis_recent_paths";
 const MAX_RECENTS = 5;
@@ -23,6 +23,7 @@ interface Loading {
   delta: boolean;
   summary: boolean;
   tests: boolean;
+  diagrams: boolean;
 }
 
 interface RepoState {
@@ -34,10 +35,12 @@ interface RepoState {
   summaryLines: string[];
   summaryDone: boolean;
   testsResult: TestsResult | null;
+  diagramsResult: DiagramsResult | null;
   loading: Loading;
   error: string | null;
   fetchSummary: () => void;
   fetchTests: () => void;
+  fetchDiagrams: () => void;
 }
 
 export function useRepo(): RepoState {
@@ -49,15 +52,18 @@ export function useRepo(): RepoState {
   const [summaryLines, setSummaryLines] = useState<string[]>([]);
   const [summaryDone, setSummaryDone] = useState(false);
   const [testsResult, setTestsResult] = useState<TestsResult | null>(null);
+  const [diagramsResult, setDiagramsResult] = useState<DiagramsResult | null>(null);
   const [loading, setLoading] = useState<Loading>({
     delta: false,
     summary: false,
     tests: false,
+    diagrams: false,
   });
   const [error, setError] = useState<string | null>(null);
 
   const summaryFetched = useRef(false);
   const testsFetched = useRef(false);
+  const diagramsFetched = useRef(false);
   const unlistenSummaryChunk = useRef<UnlistenFn | null>(null);
   const unlistenSummaryDone = useRef<UnlistenFn | null>(null);
 
@@ -66,9 +72,11 @@ export function useRepo(): RepoState {
     setSummaryLines([]);
     setSummaryDone(false);
     setTestsResult(null);
+    setDiagramsResult(null);
     setError(null);
     summaryFetched.current = false;
     testsFetched.current = false;
+    diagramsFetched.current = false;
   }
 
   function setRepoPath(path: string) {
@@ -139,6 +147,16 @@ export function useRepo(): RepoState {
       .finally(() => setLoading((l) => ({ ...l, tests: false })));
   }
 
+  function fetchDiagrams() {
+    if (!repoPath || diagramsFetched.current) return;
+    diagramsFetched.current = true;
+    setLoading((l) => ({ ...l, diagrams: true }));
+    invoke<DiagramsResult>("get_diagrams", { repoPath })
+      .then((result) => setDiagramsResult(result))
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading((l) => ({ ...l, diagrams: false })));
+  }
+
   return {
     repoPath,
     setRepoPath,
@@ -148,9 +166,11 @@ export function useRepo(): RepoState {
     summaryLines,
     summaryDone,
     testsResult,
+    diagramsResult,
     loading,
     error,
     fetchSummary,
     fetchTests,
+    fetchDiagrams,
   };
 }

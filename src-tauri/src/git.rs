@@ -29,6 +29,12 @@ pub struct TestsResult {
     pub test_cases: Vec<TestCase>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct DiagramsResult {
+    pub before: String,
+    pub after: String,
+}
+
 fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
     let mut cmd_args = vec!["-C", repo_path];
     cmd_args.extend_from_slice(args);
@@ -597,6 +603,74 @@ fn extract_json_array(s: &str) -> String {
     } else {
         s
     };
+    s.to_string()
+}
+
+#[tauri::command]
+pub async fn get_diagrams(repo_path: String) -> Result<DiagramsResult, String> {
+    let branch = detect_default_branch(&repo_path);
+
+    let diff_output = Command::new("git")
+        .args(["-C", &repo_path, "diff", &branch])
+        .output()
+        .map_err(|e| format!("Failed to run git diff: {}", e))?;
+
+    if diff_output.stdout.is_empty() {
+        let empty = "graph LR\n    A[No changes]".to_string();
+        return Ok(DiagramsResult { before: empty.clone(), after: empty });
+    }
+
+    let prompt = r#"Analyze these code changes and produce exactly two Mermaid flowchart diagrams.
+
+"before": a flowchart showing the key components/functions/modules that were CHANGED and how they related to each other BEFORE this diff.
+"after": a flowchart showing those same elements and how they relate AFTER this diff, including any new nodes introduced.
+
+Rules:
+- Use `graph LR` direction
+- Only include nodes directly involved in the changes (keep it focused, max ~10 nodes each)
+- Use short readable node labels
+- Respond with ONLY a JSON object: {"before": "...", "after": "..."}
+- The values must be valid Mermaid graph strings
+- No markdown fences, no explanation"#;
+
+    let mut child = Command::new("claude")
+        .args(["-p", prompt])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to start claude: {}", e))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(&diff_output.stdout);
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed to wait for claude: {}", e))?;
+
+    let response = String::from_utf8_lossy(&output.stdout).to_string();
+
+    // Extract JSON object from response
+    let json_str = extract_json_object(&response);
+
+    #[derive(serde::Deserialize)]
+    struct ClaudeResponse { before: String, after: String }
+
+    let parsed: ClaudeResponse = serde_json::from_str(&json_str).map_err(|e| {
+        format!("Failed to parse Claude response: {}\nRaw: {}", e, response)
+    })?;
+
+    Ok(DiagramsResult { before: parsed.before, after: parsed.after })
+}
+
+fn extract_json_object(s: &str) -> String {
+    let s = s.trim();
+    if let Some(start) = s.find('{') {
+        if let Some(end) = s.rfind('}') {
+            return s[start..=end].to_string();
+        }
+    }
     s.to_string()
 }
 

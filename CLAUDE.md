@@ -2,7 +2,7 @@
 
 ## What this project is
 
-A Tauri v2 desktop app (Rust backend, React + TypeScript frontend) for inspecting git branch changes. Users pick a local repo folder and see three tabs: file-level diff stats, a Claude-generated summary, and an analysis of changed test cases.
+A Tauri v2 desktop app (Rust backend, React + TypeScript frontend) for inspecting git branch changes. Users pick a local repo folder and see four tabs: file-level diff stats, a Claude-generated summary, an analysis of changed test cases, and before/after Mermaid impact diagrams.
 
 ## Spec directory
 
@@ -14,6 +14,7 @@ All feature behaviour is documented in `/spec`. **When making any change to beha
 | `spec/delta-tab.md` | Delta tab: file list, git command, empty states |
 | `spec/summary-tab.md` | Summary tab: streaming, Claude prompt, events |
 | `spec/tests-tab.md` | Tests tab: full pipeline, test file heuristics, Claude prompt |
+| `spec/diagrams-tab.md` | Diagrams tab: before/after Mermaid impact graphs, Claude prompt |
 | `spec/architecture.md` | Stack, directory structure, commands, data flow |
 
 ## Key files
@@ -43,8 +44,8 @@ cd src-tauri && cargo test        # Rust unit tests
 - All git operations run in the Rust backend via `src-tauri/src/git.rs`
 - Claude is invoked via the `claude -p` CLI — it must be installed and on PATH
 - The folder picker and summary streaming use Tauri events; everything else uses `invoke`
-- Delta is fetched eagerly on folder pick; Summary and Tests are lazy (first tab visit)
-- Three-dot git ranges (`branch...HEAD`) are used throughout so the diff reflects only what this branch introduced, regardless of whether the default branch has moved
+- Delta is fetched eagerly on folder pick; Summary, Tests, and Diagrams are lazy (first tab visit)
+- Two-dot git diff (`git diff <branch>`) is used throughout — covers committed, staged, and unstaged changes and works when HEAD is the default branch
 
 ## Conventions
 

@@ -9,6 +9,7 @@ const TABS: { id: TabName; label: string }[] = [
   { id: "delta", label: "Delta" },
   { id: "summary", label: "Summary" },
   { id: "tests", label: "Tests" },
+  { id: "diagrams", label: "Diagrams" },
 ];
 
 export function TabBar({ active, onChange }: Props) {

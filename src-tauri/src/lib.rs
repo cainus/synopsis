@@ -10,6 +10,7 @@ pub fn run() {
             git::get_delta,
             git::get_summary,
             git::get_tests_result,
+            git::get_diagrams,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

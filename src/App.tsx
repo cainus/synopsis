@@ -4,6 +4,7 @@ import { TabBar } from "./components/TabBar";
 import { DeltaTab } from "./components/DeltaTab";
 import { SummaryTab } from "./components/SummaryTab";
 import { TestsTab } from "./components/TestsTab";
+import { DiagramsTab } from "./components/DiagramsTab";
 import { useRepo } from "./hooks/useRepo";
 import type { TabName } from "./types";
 import "./App.css";
@@ -19,10 +20,12 @@ function App() {
     summaryLines,
     summaryDone,
     testsResult,
+    diagramsResult,
     loading,
     error,
     fetchSummary,
     fetchTests,
+    fetchDiagrams,
   } = useRepo();
 
   const handleTabChange = useCallback(
@@ -30,6 +33,7 @@ function App() {
       setActiveTab(tab);
       if (tab === "summary") fetchSummary();
       if (tab === "tests") fetchTests();
+      if (tab === "diagrams") fetchDiagrams();
     },
     [fetchSummary, fetchTests]
   );
@@ -63,6 +67,14 @@ function App() {
             result={testsResult}
             loading={loading.tests}
             hasRepo={!!repoPath}
+          />
+        )}
+        {activeTab === "diagrams" && (
+          <DiagramsTab
+            result={diagramsResult}
+            loading={loading.diagrams}
+            hasRepo={!!repoPath}
+            onGenerate={fetchDiagrams}
           />
         )}
       </main>
