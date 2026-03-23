@@ -61,6 +61,7 @@ export function DiagramsTab({ result, loading, hasRepo, onGenerate }: Props) {
             <span className="legend-dot legend-modified" />modified
           </span>
         </div>
+        {result!.before_caption && <p className="diagram-caption">{result!.before_caption}</p>}
         <Diagram id="diagram-before" chart={result!.before} />
       </div>
       <div className="diagram-panel">
@@ -71,6 +72,7 @@ export function DiagramsTab({ result, loading, hasRepo, onGenerate }: Props) {
             <span className="legend-dot legend-modified" />modified
           </span>
         </div>
+        {result!.after_caption && <p className="diagram-caption">{result!.after_caption}</p>}
         <Diagram id="diagram-after" chart={result!.after} />
       </div>
     </div>

@@ -33,6 +33,8 @@ pub struct TestsResult {
 pub struct DiagramsResult {
     pub before: String,
     pub after: String,
+    pub before_caption: String,
+    pub after_caption: String,
 }
 
 fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
@@ -617,7 +619,12 @@ pub async fn get_diagrams(repo_path: String) -> Result<DiagramsResult, String> {
 
     if diff_output.stdout.is_empty() {
         let empty = "graph LR\n    A[No changes]".to_string();
-        return Ok(DiagramsResult { before: empty.clone(), after: empty });
+        return Ok(DiagramsResult {
+            before: empty.clone(),
+            after: empty,
+            before_caption: String::new(),
+            after_caption: String::new(),
+        });
     }
 
     let prompt = r#"Analyze these code changes and produce two Mermaid flowchart diagrams.
@@ -643,9 +650,10 @@ Rules:
 - Keep it focused, max ~12 nodes each
 - Use short readable node labels
 - Node IDs must be alphanumeric (no spaces or special chars)
-- Respond with ONLY a JSON object: {"before": "...", "after": "..."}
+- Respond with ONLY a JSON object: {"before": "...", "after": "...", "before_caption": "...", "after_caption": "..."}
+- "before_caption" and "after_caption": one plain-English sentence each describing what the diagram shows
 - Values must be valid Mermaid graph strings with no markdown fences
-- No explanation"#;
+- No explanation outside the JSON"#;
 
     let mut child = Command::new("claude")
         .args(["-p", prompt])
@@ -669,13 +677,23 @@ Rules:
     let json_str = extract_json_object(&response);
 
     #[derive(serde::Deserialize)]
-    struct ClaudeResponse { before: String, after: String }
+    struct ClaudeResponse {
+        before: String,
+        after: String,
+        before_caption: String,
+        after_caption: String,
+    }
 
     let parsed: ClaudeResponse = serde_json::from_str(&json_str).map_err(|e| {
         format!("Failed to parse Claude response: {}\nRaw: {}", e, response)
     })?;
 
-    Ok(DiagramsResult { before: parsed.before, after: parsed.after })
+    Ok(DiagramsResult {
+        before: parsed.before,
+        after: parsed.after,
+        before_caption: parsed.before_caption,
+        after_caption: parsed.after_caption,
+    })
 }
 
 fn extract_json_object(s: &str) -> String {
