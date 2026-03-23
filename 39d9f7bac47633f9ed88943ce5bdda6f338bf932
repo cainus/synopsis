@@ -1,0 +1,29 @@
+src/App.css
+  92dcc00912aec612 422-430
+src/components/DeltaTab.test.tsx
+  92dcc00912aec612 7,9-10,28
+src/components/TestsTab.tsx
+  92dcc00912aec612 1,9-55,68,70-71,76,79
+src-tauri/src/git.rs
+  92dcc00912aec612 213-219,435-439,448-450,453-454,457-465,470-486
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "39d9f7bac47633f9ed88943ce5bdda6f338bf932",
+  "prompts": {
+    "92dcc00912aec612": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "be40e517-284e-4331-acca-72dbdb2984d6",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Greggory Caines <gregg@caines.ca>",
+      "messages": [],
+      "total_additions": 111,
+      "total_deletions": 34,
+      "accepted_lines": 111,
+      "overriden_lines": 0
+    }
+  }
+}
