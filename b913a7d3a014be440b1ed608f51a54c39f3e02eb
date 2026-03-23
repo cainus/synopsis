@@ -1,0 +1,29 @@
+src/App.css
+  92dcc00912aec612 416-422
+src/types.ts
+  92dcc00912aec612 27-28
+src/components/DiagramsTab.tsx
+  92dcc00912aec612 64,75
+src-tauri/src/git.rs
+  92dcc00912aec612 36-37,622-627,653-654,656,680-685,691-696
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "b913a7d3a014be440b1ed608f51a54c39f3e02eb",
+  "prompts": {
+    "92dcc00912aec612": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "be40e517-284e-4331-acca-72dbdb2984d6",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Greggory Caines <gregg@caines.ca>",
+      "messages": [],
+      "total_additions": 34,
+      "total_deletions": 5,
+      "accepted_lines": 34,
+      "overriden_lines": 0
+    }
+  }
+}
