@@ -636,6 +636,12 @@ pub async fn get_diagrams(repo_path: String) -> Result<DiagramsResult, String> {
   Include at the top:
     classDef removed fill:#3a1a1a,stroke:#f44336,color:#ccc
     classDef modified fill:#3a2e00,stroke:#ffb300,color:#ccc
+  EXTRACT FUNCTION/METHOD RULE: if this diff is an "extract function" or "extract method" refactor,
+  use a Mermaid subgraph in the BEFORE diagram to show the to-be-extracted logic nested inside its
+  parent function. Example:
+    subgraph parentFn["parentFunction()"]
+      extractedLogic["logic to extract"]
+    end
 
 "after": show those same elements and new relationships AFTER this diff.
   - Nodes that are NEW (only in after): class "added" → fill:#1a3a1a,stroke:#4caf50,color:#ccc
