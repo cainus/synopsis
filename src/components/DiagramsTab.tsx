@@ -53,26 +53,25 @@ export function DiagramsTab({ result, loading, hasRepo, onGenerate }: Props) {
 
   return (
     <div className="diagrams-tab">
-      <div className="diagrams-split">
-        <div className="diagram-panel">
-          <div className="diagram-label">Before</div>
-          <Diagram id="diagram-before" chart={result!.before} />
-        </div>
-        <div className="diagram-panel">
-          <div className="diagram-label">After</div>
-          <Diagram id="diagram-after" chart={result!.after} />
-        </div>
-      </div>
-      <div className="diagram-panel diagrams-combined">
+      <div className="diagram-panel">
         <div className="diagram-label">
-          Combined
+          Before
+          <span className="diagram-legend">
+            <span className="legend-dot legend-removed" />removed
+            <span className="legend-dot legend-modified" />modified
+          </span>
+        </div>
+        <Diagram id="diagram-before" chart={result!.before} />
+      </div>
+      <div className="diagram-panel">
+        <div className="diagram-label">
+          After
           <span className="diagram-legend">
             <span className="legend-dot legend-added" />added
             <span className="legend-dot legend-modified" />modified
-            <span className="legend-dot legend-removed" />removed
           </span>
         </div>
-        <Diagram id="diagram-combined" chart={result!.combined} />
+        <Diagram id="diagram-after" chart={result!.after} />
       </div>
     </div>
   );

@@ -402,20 +402,8 @@ body {
 /* Diagrams tab */
 .diagrams-tab {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  gap: 24px;
   height: 100%;
-}
-
-.diagrams-split {
-  display: flex;
-  gap: 20px;
-  flex: 1;
-  min-height: 0;
-}
-
-.diagrams-combined {
-  flex: none;
 }
 
 .diagram-panel {

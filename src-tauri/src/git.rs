@@ -33,7 +33,6 @@ pub struct TestsResult {
 pub struct DiagramsResult {
     pub before: String,
     pub after: String,
-    pub combined: String,
 }
 
 fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
@@ -618,29 +617,33 @@ pub async fn get_diagrams(repo_path: String) -> Result<DiagramsResult, String> {
 
     if diff_output.stdout.is_empty() {
         let empty = "graph LR\n    A[No changes]".to_string();
-        return Ok(DiagramsResult { before: empty.clone(), after: empty.clone(), combined: empty });
+        return Ok(DiagramsResult { before: empty.clone(), after: empty });
     }
 
-    let prompt = r#"Analyze these code changes and produce three Mermaid flowchart diagrams.
+    let prompt = r#"Analyze these code changes and produce two Mermaid flowchart diagrams.
 
-"before": a flowchart showing the key components/functions/modules that were CHANGED and how they related BEFORE this diff.
-"after": a flowchart showing those same elements and their new relationships AFTER this diff, including any new nodes.
-"combined": a single flowchart showing everything — use classDef to colour-code nodes:
-  - nodes that are NEW (only in after): class "added"  → fill:#1a3a1a,stroke:#4caf50,color:#ccc
-  - nodes that are REMOVED (only in before): class "removed" → fill:#3a1a1a,stroke:#f44336,color:#ccc
-  - nodes that CHANGED (present in both but modified): class "modified" → fill:#3a2e00,stroke:#ffb300,color:#ccc
-  - nodes that are UNCHANGED: no class
-  Include these exact classDef lines at the top of the combined diagram:
-    classDef added fill:#1a3a1a,stroke:#4caf50,color:#ccc
+"before": show the key components/functions/modules involved and how they related BEFORE this diff.
+  - Nodes that will be REMOVED (gone in after): class "removed" → fill:#3a1a1a,stroke:#f44336,color:#ccc
+  - Nodes that will be MODIFIED (present in both but changed): class "modified" → fill:#3a2e00,stroke:#ffb300,color:#ccc
+  - Unchanged nodes: no class
+  Include at the top:
     classDef removed fill:#3a1a1a,stroke:#f44336,color:#ccc
     classDef modified fill:#3a2e00,stroke:#ffb300,color:#ccc
 
+"after": show those same elements and new relationships AFTER this diff.
+  - Nodes that are NEW (only in after): class "added" → fill:#1a3a1a,stroke:#4caf50,color:#ccc
+  - Nodes that were MODIFIED (present in both but changed): class "modified" → fill:#3a2e00,stroke:#ffb300,color:#ccc
+  - Unchanged nodes: no class
+  Include at the top:
+    classDef added fill:#1a3a1a,stroke:#4caf50,color:#ccc
+    classDef modified fill:#3a2e00,stroke:#ffb300,color:#ccc
+
 Rules:
-- Use `graph LR` direction for all three
+- Use `graph LR` direction for both
 - Keep it focused, max ~12 nodes each
 - Use short readable node labels
 - Node IDs must be alphanumeric (no spaces or special chars)
-- Respond with ONLY a JSON object: {"before": "...", "after": "...", "combined": "..."}
+- Respond with ONLY a JSON object: {"before": "...", "after": "..."}
 - Values must be valid Mermaid graph strings with no markdown fences
 - No explanation"#;
 
@@ -666,13 +669,13 @@ Rules:
     let json_str = extract_json_object(&response);
 
     #[derive(serde::Deserialize)]
-    struct ClaudeResponse { before: String, after: String, combined: String }
+    struct ClaudeResponse { before: String, after: String }
 
     let parsed: ClaudeResponse = serde_json::from_str(&json_str).map_err(|e| {
         format!("Failed to parse Claude response: {}\nRaw: {}", e, response)
     })?;
 
-    Ok(DiagramsResult { before: parsed.before, after: parsed.after, combined: parsed.combined })
+    Ok(DiagramsResult { before: parsed.before, after: parsed.after })
 }
 
 fn extract_json_object(s: &str) -> String {
