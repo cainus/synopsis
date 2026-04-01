@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Props {
   repoPath: string | null;
@@ -11,7 +18,6 @@ interface Props {
 
 export function FolderPicker({ repoPath, onPick, onRefresh, recentPaths }: Props) {
   const [recentsOpen, setRecentsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const unlisten = listen<string | null>("folder-picked", (event) => {
@@ -22,17 +28,6 @@ export function FolderPicker({ repoPath, onPick, onRefresh, recentPaths }: Props
     };
   }, [onPick]);
 
-  useEffect(() => {
-    if (!recentsOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (!dropdownRef.current?.contains(e.target as Node)) {
-        setRecentsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [recentsOpen]);
-
   function handleClick() {
     invoke("pick_folder").catch(console.error);
   }
@@ -42,38 +37,39 @@ export function FolderPicker({ repoPath, onPick, onRefresh, recentPaths }: Props
     onPick(path);
   }
 
-  // Recents excluding the current path
   const otherRecents = recentPaths.filter((p) => p !== repoPath);
 
   return (
-    <div className="folder-picker">
-      <button onClick={handleClick}>Choose Repo Folder</button>
+    <div className="flex items-center gap-2.5 flex-1">
+      <Button variant="secondary" size="sm" onClick={handleClick}>
+        Choose Repo Folder
+      </Button>
       {otherRecents.length > 0 && (
-        <div className="recents-dropdown" ref={dropdownRef}>
-          <button
-            className="recents-btn"
-            onClick={() => setRecentsOpen((o) => !o)}
-            title="Recent folders"
-          >
+        <DropdownMenu open={recentsOpen} onOpenChange={setRecentsOpen}>
+          <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground cursor-pointer">
             Recent ▾
-          </button>
-          {recentsOpen && (
-            <ul className="recents-list">
-              {otherRecents.map((p) => (
-                <li key={p}>
-                  <button onClick={() => handleSelectRecent(p)} title={p}>
-                    {p}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[280px] max-w-[480px]">
+            {otherRecents.map((p) => (
+              <DropdownMenuItem
+                key={p}
+                onClick={() => handleSelectRecent(p)}
+                className="font-mono text-xs truncate"
+              >
+                {p}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
       {repoPath && (
         <>
-          <span className="folder-path">{repoPath}</span>
-          <button className="refresh-btn" onClick={onRefresh} title="Refresh">↺</button>
+          <span className="text-muted-foreground text-xs font-mono truncate overflow-hidden">
+            {repoPath}
+          </span>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={onRefresh} title="Refresh">
+            ↺
+          </Button>
         </>
       )}
     </div>

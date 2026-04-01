@@ -1,4 +1,10 @@
 import { useState, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import type { DetailsResult, SummaryChangeItem } from "../types";
 import { DiffModal } from "./DiffModal";
 
@@ -13,7 +19,7 @@ function SnippetLink({ item, onShowSnippet }: { item: SummaryChangeItem; onShowS
   if (!item.file) return null;
   return (
     <button
-      className="summary-file-link"
+      className="text-primary text-[11px] font-mono hover:underline hover:text-primary/80 px-0.5 bg-transparent border-none cursor-pointer"
       onClick={(e) => { e.stopPropagation(); onShowSnippet(item.file, item.snippet); }}
     >
       {item.file.split("/").pop()}
@@ -24,49 +30,40 @@ function SnippetLink({ item, onShowSnippet }: { item: SummaryChangeItem; onShowS
 function CollapsibleNode({ item, depth, onShowSnippet }: { item: SummaryChangeItem; depth: number; onShowSnippet: (file: string, snippet: string) => void }) {
   const [open, setOpen] = useState(false);
   const hasChildren = item.children.length > 0;
-  const isTopLevel = depth === 0;
-  const nodeClass = isTopLevel ? "summary-change-item" : "summary-tree-node";
-  const labelClass = isTopLevel ? "summary-change-toggle" : "summary-tree-toggle";
+  const isNested = depth > 0;
+  const textColor = isNested ? "text-muted-foreground/70" : "text-muted-foreground";
+  const textSize = isNested ? "text-xs" : "text-sm";
 
   if (!hasChildren) {
     return (
-      <li className={nodeClass}>
-        {isTopLevel ? (
-          <div className={labelClass}>
-            <span className="summary-chevron">·</span>
-            {item.title}
-            <SnippetLink item={item} onShowSnippet={onShowSnippet} />
-          </div>
-        ) : (
-          <span className="summary-tree-label">
-            {item.title}
-            <SnippetLink item={item} onShowSnippet={onShowSnippet} />
-          </span>
-        )}
+      <li className="py-0.5">
+        <span className={`${textSize} leading-relaxed ${textColor}`}>
+          <span className="text-muted-foreground/40 mr-1.5">–</span>
+          {item.title}
+          <SnippetLink item={item} onShowSnippet={onShowSnippet} />
+        </span>
       </li>
     );
   }
 
   return (
-    <li className={nodeClass}>
-      <button
-        className={labelClass}
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
-        <span className={`summary-chevron${open ? " open" : ""}`}>▸</span>
-        {item.title}
-        <SnippetLink item={item} onShowSnippet={onShowSnippet} />
-      </button>
-      <div className={`summary-collapse${open ? " open" : ""}${isTopLevel ? " summary-collapse-top" : ""}`}>
-        <div className="summary-collapse-inner">
-          <ul className={isTopLevel ? "summary-tree" : "summary-tree summary-tree-nested"}>
+    <li className="py-0.5">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger className={`flex items-baseline gap-1.5 w-full ${textSize} leading-relaxed ${textColor} hover:text-foreground/80 text-left bg-transparent border-none cursor-pointer p-0`}>
+          <span className={`text-muted-foreground/50 text-[11px] shrink-0 w-2.5 inline-block transition-transform duration-150 ${open ? "rotate-90" : ""}`}>
+            ▸
+          </span>
+          {item.title}
+          <SnippetLink item={item} onShowSnippet={onShowSnippet} />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <ul className="pl-4 space-y-0">
             {item.children.map((child, i) => (
               <CollapsibleNode key={i} item={child} depth={depth + 1} onShowSnippet={onShowSnippet} />
             ))}
           </ul>
-        </div>
-      </div>
+        </CollapsibleContent>
+      </Collapsible>
     </li>
   );
 }
@@ -89,35 +86,33 @@ function TopLevelList({
   if (items.length === 0) return null;
 
   return (
-    <div className="summary-section">
-      <h3 className="summary-section-label">{label}</h3>
-      <ul className="summary-change-list">
+    <div className="mb-5">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">{label}</h3>
+      <ul className="space-y-0.5">
         {items.map((item, i) => {
           const key = `${prefix}-${i}`;
           const isOpen = expandedKey === key;
           const hasChildren = item.children.length > 0;
           return (
-            <li key={i} className="summary-change-item">
-              <button
-                className="summary-change-toggle"
-                onClick={() => onToggle(key)}
-                aria-expanded={isOpen}
-              >
-                <span className={`summary-chevron${isOpen ? " open" : ""}`}>{hasChildren ? "▸" : "·"}</span>
-                {item.title}
-                <SnippetLink item={item} onShowSnippet={onShowSnippet} />
-              </button>
-              {hasChildren && (
-                <div className={`summary-collapse summary-collapse-top${isOpen ? " open" : ""}`}>
-                  <div className="summary-collapse-inner">
-                    <ul className="summary-tree">
+            <li key={i} className="mb-0.5">
+              <Collapsible open={isOpen} onOpenChange={() => onToggle(key)}>
+                <CollapsibleTrigger className="flex items-baseline gap-1.5 w-full py-2 px-2.5 bg-card rounded text-sm leading-snug text-foreground/90 hover:bg-accent text-left border-none cursor-pointer">
+                  <span className={`text-muted-foreground/50 text-[11px] shrink-0 w-2.5 inline-block transition-transform duration-150 ${isOpen ? "rotate-90" : ""}`}>
+                    {hasChildren ? "▸" : "·"}
+                  </span>
+                  {item.title}
+                  <SnippetLink item={item} onShowSnippet={onShowSnippet} />
+                </CollapsibleTrigger>
+                {hasChildren && (
+                  <CollapsibleContent className="pl-6 pr-2.5 py-1">
+                    <ul className="space-y-0">
                       {item.children.map((child, j) => (
                         <CollapsibleNode key={j} item={child} depth={1} onShowSnippet={onShowSnippet} />
                       ))}
                     </ul>
-                  </div>
-                </div>
-              )}
+                  </CollapsibleContent>
+                )}
+              </Collapsible>
             </li>
           );
         })}
@@ -144,20 +139,20 @@ export function DetailsTab({ result, loading, hasRepo, onGenerate }: Props) {
     setModalSnippet("");
   }, []);
 
-  if (!hasRepo) return <div className="status empty">Pick a repo folder to generate details.</div>;
+  if (!hasRepo) return <div className="text-muted-foreground/60 py-8 text-center">Pick a repo folder to generate details.</div>;
 
   if (!loading && !result) {
     return (
-      <div className="generate-prompt">
-        <button onClick={onGenerate}>Generate Details</button>
+      <div className="flex justify-center py-12">
+        <Button onClick={onGenerate}>Generate Details</Button>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="thinking">
-        <span className="spinner" />
+      <div className="flex items-center justify-center gap-2.5 text-muted-foreground py-12 text-sm">
+        <span className="inline-block w-3.5 h-3.5 border-2 border-muted border-t-primary rounded-full animate-spin shrink-0" />
         Thinking…
       </div>
     );
@@ -166,7 +161,7 @@ export function DetailsTab({ result, loading, hasRepo, onGenerate }: Props) {
   if (!result) return null;
 
   return (
-    <div className="summary-tab">
+    <div className="max-w-[780px]">
       <TopLevelList items={result.product_changes} label="Product Changes" prefix="product" expandedKey={expandedKey} onToggle={toggle} onShowSnippet={showSnippet} />
       <TopLevelList items={result.technical_changes} label="Technical Changes" prefix="technical" expandedKey={expandedKey} onToggle={toggle} onShowSnippet={showSnippet} />
       {modalFile !== null && (

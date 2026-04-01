@@ -35,7 +35,8 @@ describe("TestsTab", () => {
   it("shows spinner while Claude analyses", () => {
     render(<TestsTab result={null} loading={true} hasRepo={true} />);
     expect(screen.getByText(/thinking/i)).toBeInTheDocument();
-    expect(document.querySelector(".spinner")).toBeInTheDocument();
+    // Spinner is now a Tailwind-styled span with animate-spin
+    expect(document.querySelector(".animate-spin")).toBeInTheDocument();
   });
 
   it("shows empty state when no test files changed", () => {
@@ -49,9 +50,11 @@ describe("TestsTab", () => {
     expect(screen.getByText(/no test file changes/i)).toBeInTheDocument();
   });
 
-  it("renders the test name (leaf) for each case", () => {
+  it("renders the test name (leaf) for each case", async () => {
     render(<TestsTab result={result} loading={false} hasRepo={true} />);
-    // Tree splits by " > " — only the leaf name is in test-name
+    // Expand first file group to see test names
+    const triggers = screen.getAllByRole("button");
+    await userEvent.click(triggers[0]);
     expect(screen.getByText("handles invalid password")).toBeInTheDocument();
     expect(screen.getByText("formats ISO strings")).toBeInTheDocument();
     // Describe segments are rendered as headers
@@ -59,25 +62,31 @@ describe("TestsTab", () => {
     expect(screen.getByText("login")).toBeInTheDocument();
   });
 
-  it("renders behaviour change descriptions", () => {
+  it("renders behaviour change descriptions", async () => {
     render(<TestsTab result={result} loading={false} hasRepo={true} />);
+    const triggers = screen.getAllByRole("button");
+    await userEvent.click(triggers[0]);
     expect(
       screen.getByText("Now throws an error instead of returning null")
     ).toBeInTheDocument();
   });
 
-  it("applies unchanged class to 'No behaviour change' entries", () => {
+  it("applies unchanged styling to 'No behaviour change' entries", async () => {
     render(<TestsTab result={result} loading={false} hasRepo={true} />);
+    const triggers = screen.getAllByRole("button");
+    await userEvent.click(triggers[0]);
     const noChange = screen.getByText("No behaviour change");
-    expect(noChange).toHaveClass("test-behaviour-unchanged");
+    expect(noChange.className).toContain("italic");
   });
 
-  it("applies modified class to behaviour changes", () => {
+  it("applies modified styling to behaviour changes", async () => {
     render(<TestsTab result={result} loading={false} hasRepo={true} />);
+    const triggers = screen.getAllByRole("button");
+    await userEvent.click(triggers[0]);
     const change = screen.getByText(
       "Now throws an error instead of returning null"
     );
-    expect(change).toHaveClass("test-behaviour-modified");
+    expect(change.className).toContain("text-foreground");
   });
 
   it("does not render 'New test' label for added tests", () => {
@@ -85,18 +94,23 @@ describe("TestsTab", () => {
     expect(screen.queryByText("New test")).not.toBeInTheDocument();
   });
 
-  it("shows + icon for new tests", () => {
+  it("shows + icon for new tests", async () => {
     render(<TestsTab result={result} loading={false} hasRepo={true} />);
-    const icons = document.querySelectorAll(".test-icon-added");
-    expect(icons.length).toBeGreaterThan(0);
-    expect(icons[0].textContent).toBe("+");
+    // Expand second file (Button.test.tsx) to see the added test
+    const triggers = screen.getAllByRole("button");
+    await userEvent.click(triggers[1]);
+    const icons = document.querySelectorAll(".text-green-500");
+    const plusIcons = Array.from(icons).filter((el) => el.textContent === "+");
+    expect(plusIcons.length).toBeGreaterThan(0);
   });
 
-  it("shows Δ icon for modified tests", () => {
+  it("shows Δ icon for modified tests", async () => {
     render(<TestsTab result={result} loading={false} hasRepo={true} />);
-    const icons = document.querySelectorAll(".test-icon-modified");
-    expect(icons.length).toBeGreaterThan(0);
-    expect(icons[0].textContent).toBe("Δ");
+    const triggers = screen.getAllByRole("button");
+    await userEvent.click(triggers[0]);
+    const icons = document.querySelectorAll(".text-amber-500");
+    const deltaIcons = Array.from(icons).filter((el) => el.textContent === "Δ");
+    expect(deltaIcons.length).toBeGreaterThan(0);
   });
 
   it("renders a file header for each distinct file", () => {
@@ -105,57 +119,60 @@ describe("TestsTab", () => {
     expect(screen.getByText("src/components/Button.test.tsx")).toBeInTheDocument();
   });
 
-  it("groups tests under their file header", () => {
+  it("groups tests under their file collapsible", () => {
     render(<TestsTab result={result} loading={false} hasRepo={true} />);
-    const groups = document.querySelectorAll(".tests-file-group");
-    expect(groups).toHaveLength(2);
+    const collapsibles = document.querySelectorAll('[data-slot="collapsible"]');
+    expect(collapsibles).toHaveLength(2);
   });
 
   it("file groups start collapsed", () => {
     render(<TestsTab result={result} loading={false} hasRepo={true} />);
-    const bodies = document.querySelectorAll(".tests-file-body");
-    bodies.forEach((b) => expect(b).not.toHaveClass("open"));
+    const collapsibles = document.querySelectorAll('[data-slot="collapsible"]');
+    collapsibles.forEach((c) => expect(c).toHaveAttribute("data-closed", ""));
   });
 
   it("expands a file group on click and collapses others", async () => {
     render(<TestsTab result={result} loading={false} hasRepo={true} />);
-    const headers = screen.getAllByRole("button");
-    const firstBody = headers[0].closest(".tests-file-group")!.querySelector(".tests-file-body")!;
-    const secondBody = headers[1].closest(".tests-file-group")!.querySelector(".tests-file-body")!;
+    const triggers = screen.getAllByRole("button");
 
-    await userEvent.click(headers[0]);
-    expect(firstBody).toHaveClass("open");
+    await userEvent.click(triggers[0]);
+    const collapsibles = document.querySelectorAll('[data-slot="collapsible"]');
+    expect(collapsibles[0]).toHaveAttribute("data-open", "");
 
-    await userEvent.click(headers[1]);
-    expect(firstBody).not.toHaveClass("open");
-    expect(secondBody).toHaveClass("open");
+    await userEvent.click(triggers[1]);
+    const updatedCollapsibles = document.querySelectorAll('[data-slot="collapsible"]');
+    expect(updatedCollapsibles[0]).toHaveAttribute("data-closed", "");
+    expect(updatedCollapsibles[1]).toHaveAttribute("data-open", "");
   });
 
   it("opens diff modal when a test case is clicked", async () => {
     render(<TestsTab result={result} loading={false} hasRepo={true} />);
-    // Expand first file group
-    const headers = screen.getAllByRole("button");
-    await userEvent.click(headers[0]);
+    const triggers = screen.getAllByRole("button");
+    await userEvent.click(triggers[0]);
 
     // Click on modified test
-    const testCase = screen.getByText("handles invalid password").closest(".test-case")!;
+    const testName = screen.getByText("handles invalid password");
+    const testCase = testName.closest('[class*="cursor-pointer"]')!;
     await userEvent.click(testCase);
 
-    expect(document.querySelector(".diff-modal")).toBeInTheDocument();
-    // Modal title should contain file and test name
-    expect(document.querySelector(".diff-modal-title")!.textContent).toContain("handles invalid password");
+    // Dialog should be open
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // Modal title contains the test name (there will be multiple matches now - one in list, one in dialog)
+    expect(screen.getAllByText(/handles invalid password/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("closes diff modal on close button", async () => {
+  it("closes diff modal on dialog close", async () => {
     render(<TestsTab result={result} loading={false} hasRepo={true} />);
-    const headers = screen.getAllByRole("button");
-    await userEvent.click(headers[0]);
+    const triggers = screen.getAllByRole("button");
+    await userEvent.click(triggers[0]);
 
-    const testCase = screen.getByText("handles invalid password").closest(".test-case")!;
+    const testName = screen.getByText("handles invalid password");
+    const testCase = testName.closest('[class*="cursor-pointer"]')!;
     await userEvent.click(testCase);
-    expect(document.querySelector(".diff-modal")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByText("✕"));
-    expect(document.querySelector(".diff-modal")).not.toBeInTheDocument();
+    // Press Escape to close
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

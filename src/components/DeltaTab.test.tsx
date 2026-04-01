@@ -49,14 +49,14 @@ describe("DeltaTab", () => {
     render(<DeltaTab result={result} loading={false} repoPath="/test" />);
     const added = screen.getAllByText(/^\+\d+/);
     expect(added.length).toBeGreaterThan(0);
-    added.forEach((el) => expect(el).toHaveClass("added"));
+    added.forEach((el) => expect(el.className).toContain("text-green-500"));
   });
 
   it("renders removed lines in red with - prefix", () => {
     render(<DeltaTab result={result} loading={false} repoPath="/test" />);
     const removed = screen.getAllByText(/^-\d+/);
     expect(removed.length).toBeGreaterThan(0);
-    removed.forEach((el) => expect(el).toHaveClass("removed"));
+    removed.forEach((el) => expect(el.className).toContain("text-red-400"));
   });
 
   it("renders correct totals in the footer", () => {

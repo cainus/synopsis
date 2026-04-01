@@ -1,5 +1,15 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import type { DeltaResult } from "../types";
 import { DiffModal } from "./DiffModal";
 
@@ -8,6 +18,12 @@ interface Props {
   loading: boolean;
   repoPath: string | null;
 }
+
+const statusColor = {
+  added: "text-green-500",
+  modified: "text-amber-500",
+  deleted: "text-red-400",
+} as const;
 
 export function DeltaTab({ result, loading, repoPath }: Props) {
   const [modalDiff, setModalDiff] = useState<string | null>(null);
@@ -29,16 +45,16 @@ export function DeltaTab({ result, loading, repoPath }: Props) {
     setModalFile("");
   }, []);
 
-  if (loading) return <div className="status">Loading diff…</div>;
-  if (!result) return <div className="status empty">Pick a repo folder to see changes.</div>;
+  if (loading) return <div className="text-muted-foreground py-8 text-center">Loading diff…</div>;
+  if (!result) return <div className="text-muted-foreground/60 py-8 text-center">Pick a repo folder to see changes.</div>;
   const onDefaultBranch = result.current_branch === result.default_branch;
 
   if (result.files.length === 0)
     return (
-      <div className="status empty">
+      <div className="text-muted-foreground/60 py-8 text-center">
         {onDefaultBranch
-          ? <>No uncommitted changes on <code>{result.default_branch}</code>.</>
-          : <>No changes vs <code>{result.default_branch}</code>.</>}
+          ? <>No uncommitted changes on <code className="text-muted-foreground">{result.default_branch}</code>.</>
+          : <>No changes vs <code className="text-muted-foreground">{result.default_branch}</code>.</>}
       </div>
     );
 
@@ -46,43 +62,45 @@ export function DeltaTab({ result, loading, repoPath }: Props) {
   const totalRemoved = result.files.reduce((s, f) => s + f.removed, 0);
 
   return (
-    <div className="delta-tab">
-      <div className="branch-label">
+    <div className="max-w-[900px]">
+      <div className="text-muted-foreground text-xs mb-3">
         {onDefaultBranch
-          ? <>Uncommitted changes on <code>{result.current_branch}</code></>
-          : <>Changes vs <code>{result.default_branch}</code></>}
+          ? <>Uncommitted changes on <code className="text-muted-foreground/80">{result.current_branch}</code></>
+          : <>Changes vs <code className="text-muted-foreground/80">{result.default_branch}</code></>}
       </div>
-      <table className="delta-table">
-        <thead>
-          <tr>
-            <th>File</th>
-            <th></th>
-            <th>Added</th>
-            <th>Removed</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="text-xs uppercase tracking-wide">File</TableHead>
+            <TableHead className="text-xs uppercase tracking-wide w-1"></TableHead>
+            <TableHead className="text-xs uppercase tracking-wide text-right w-20">Added</TableHead>
+            <TableHead className="text-xs uppercase tracking-wide text-right w-20">Removed</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {result.files.map((f) => (
-            <tr key={f.path} className="delta-row" onClick={() => openFile(f.path)}>
-              <td className={`file-path file-status-${f.status}`}>{f.path}</td>
-              <td className="file-badge-cell">
-                <span className={`file-badge ${f.untracked ? "badge-untracked" : "badge-tracked"}`}>
+            <TableRow key={f.path} className="cursor-pointer" onClick={() => openFile(f.path)}>
+              <TableCell className={`font-mono text-sm ${statusColor[f.status]}`}>{f.path}</TableCell>
+              <TableCell className="whitespace-nowrap pr-3">
+                <Badge variant={f.untracked ? "outline" : "secondary"} className="text-[0.65rem] font-semibold uppercase tracking-wide">
                   {f.untracked ? "untracked" : "tracked"}
-                </span>
-              </td>
-              <td className="added">+{f.added}</td>
-              <td className="removed">-{f.removed}</td>
-            </tr>
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right text-green-500 font-mono text-sm">+{f.added}</TableCell>
+              <TableCell className="text-right text-red-400 font-mono text-sm">-{f.removed}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td className="total-label" colSpan={2}>Total ({result.files.length} files)</td>
-            <td className="added">+{totalAdded}</td>
-            <td className="removed">-{totalRemoved}</td>
-          </tr>
-        </tfoot>
-      </table>
+        </TableBody>
+        <TableFooter>
+          <TableRow>
+            <TableCell colSpan={2} className="text-muted-foreground text-xs">
+              Total ({result.files.length} files)
+            </TableCell>
+            <TableCell className="text-right text-green-500 font-mono text-sm">+{totalAdded}</TableCell>
+            <TableCell className="text-right text-red-400 font-mono text-sm">-{totalRemoved}</TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
       {modalDiff !== null && (
         <DiffModal diff={modalDiff} title={modalFile} onClose={closeModal} />
       )}

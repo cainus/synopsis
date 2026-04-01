@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 type ViewMode = "inline" | "side-by-side";
 
@@ -8,9 +15,21 @@ interface Props {
   onClose: () => void;
 }
 
+function classFor(line: string): string {
+  if (line.startsWith("+") && !line.startsWith("+++")) return "text-green-500 bg-green-500/8";
+  if (line.startsWith("-") && !line.startsWith("---")) return "text-red-400 bg-red-400/8";
+  if (line.startsWith("@@")) return "text-primary";
+  if (line.startsWith("diff ")) return "text-muted-foreground/60";
+  return "";
+}
+
+function DiffLine({ line }: { line: string }) {
+  return <div className={`min-h-[1em] ${classFor(line)}`}>{line || "\n"}</div>;
+}
+
 function InlineView({ lines }: { lines: string[] }) {
   return (
-    <pre className="diff-content">
+    <pre className="m-0 p-3 px-4 font-mono text-xs leading-relaxed text-muted-foreground whitespace-pre tab-[4]">
       {lines.map((line, i) => (
         <DiffLine key={i} line={line} />
       ))}
@@ -26,11 +45,11 @@ function SideBySideView({ lines }: { lines: string[] }) {
   while (i < lines.length) {
     const line = lines[i];
     if (line.startsWith("@@") || line.startsWith("diff ") || line.startsWith("---") || line.startsWith("+++") || line.startsWith("index ")) {
-      left.push({ line, cls: classFor(line) });
-      right.push({ line, cls: classFor(line) });
+      const cls = classFor(line);
+      left.push({ line, cls });
+      right.push({ line, cls });
       i++;
     } else if (line.startsWith("-")) {
-      // Collect consecutive removes then adds to pair them
       const removes: string[] = [];
       while (i < lines.length && lines[i].startsWith("-") && !lines[i].startsWith("---")) {
         removes.push(lines[i].slice(1));
@@ -44,96 +63,79 @@ function SideBySideView({ lines }: { lines: string[] }) {
       const max = Math.max(removes.length, adds.length);
       for (let j = 0; j < max; j++) {
         left.push(j < removes.length
-          ? { line: removes[j], cls: "diff-remove" }
-          : { line: "", cls: "diff-empty" });
+          ? { line: removes[j], cls: "text-red-400 bg-red-400/8" }
+          : { line: "", cls: "bg-background" });
         right.push(j < adds.length
-          ? { line: adds[j], cls: "diff-add" }
-          : { line: "", cls: "diff-empty" });
+          ? { line: adds[j], cls: "text-green-500 bg-green-500/8" }
+          : { line: "", cls: "bg-background" });
       }
     } else if (line.startsWith("+")) {
-      left.push({ line: "", cls: "diff-empty" });
-      right.push({ line: line.slice(1), cls: "diff-add" });
+      left.push({ line: "", cls: "bg-background" });
+      right.push({ line: line.slice(1), cls: "text-green-500 bg-green-500/8" });
       i++;
     } else {
-      // Context line
       const text = line.startsWith(" ") ? line.slice(1) : line;
-      left.push({ line: text, cls: "diff-line" });
-      right.push({ line: text, cls: "diff-line" });
+      left.push({ line: text, cls: "" });
+      right.push({ line: text, cls: "" });
       i++;
     }
   }
 
   return (
-    <div className="diff-side-by-side">
-      <pre className="diff-side-pane">
+    <div className="flex min-h-0">
+      <pre className="flex-1 m-0 p-3 px-4 font-mono text-xs leading-relaxed text-muted-foreground whitespace-pre tab-[4] overflow-x-auto min-w-0">
         {left.map((entry, j) => (
-          <div key={j} className={entry.cls}>{entry.line || "\n"}</div>
+          <div key={j} className={`min-h-[1em] ${entry.cls}`}>{entry.line || "\n"}</div>
         ))}
       </pre>
-      <pre className="diff-side-pane">
+      <pre className="flex-1 m-0 p-3 px-4 font-mono text-xs leading-relaxed text-muted-foreground whitespace-pre tab-[4] overflow-x-auto min-w-0 border-l border-border">
         {right.map((entry, j) => (
-          <div key={j} className={entry.cls}>{entry.line || "\n"}</div>
+          <div key={j} className={`min-h-[1em] ${entry.cls}`}>{entry.line || "\n"}</div>
         ))}
       </pre>
     </div>
   );
 }
 
-function classFor(line: string): string {
-  if (line.startsWith("+") && !line.startsWith("+++")) return "diff-add";
-  if (line.startsWith("-") && !line.startsWith("---")) return "diff-remove";
-  if (line.startsWith("@@")) return "diff-hunk";
-  if (line.startsWith("diff ")) return "diff-header";
-  return "diff-line";
-}
-
-function DiffLine({ line }: { line: string }) {
-  return <div className={classFor(line)}>{line || "\n"}</div>;
-}
-
 export function DiffModal({ diff, title, onClose }: Props) {
-  const backdropRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<ViewMode>("inline");
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === backdropRef.current) onClose();
-  };
 
   const lines = diff.split("\n");
 
   return (
-    <div className="diff-modal-backdrop" ref={backdropRef} onClick={handleBackdropClick}>
-      <div className={`diff-modal${mode === "side-by-side" ? " diff-modal-wide" : ""}`}>
-        <div className="diff-modal-header">
-          <span className="diff-modal-title">{title}</span>
-          <div className="diff-modal-controls">
-            <div className="diff-mode-toggle">
-              <button
-                className={`diff-mode-btn${mode === "inline" ? " active" : ""}`}
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className={`${mode === "side-by-side" ? "max-w-[1400px]" : "max-w-[900px]"} w-[90vw] max-h-[80vh] flex flex-col p-0 gap-0`}>
+        <DialogHeader className="flex flex-row items-center justify-between px-4 py-3 border-b border-border shrink-0 space-y-0">
+          <DialogTitle className="font-mono text-xs text-muted-foreground truncate">
+            {title}
+          </DialogTitle>
+          <div className="flex items-center gap-3">
+            <div className="flex border border-border rounded overflow-hidden">
+              <Button
+                variant={mode === "inline" ? "secondary" : "ghost"}
+                size="sm"
+                className="rounded-none text-[11px] h-7 px-2.5"
                 onClick={() => setMode("inline")}
-              >Inline</button>
-              <button
-                className={`diff-mode-btn${mode === "side-by-side" ? " active" : ""}`}
+              >
+                Inline
+              </Button>
+              <Button
+                variant={mode === "side-by-side" ? "secondary" : "ghost"}
+                size="sm"
+                className="rounded-none text-[11px] h-7 px-2.5 border-l border-border"
                 onClick={() => setMode("side-by-side")}
-              >Side by side</button>
+              >
+                Side by side
+              </Button>
             </div>
-            <button className="diff-modal-close" onClick={onClose}>✕</button>
           </div>
-        </div>
-        <div className="diff-modal-body">
+        </DialogHeader>
+        <div className="overflow-auto flex-1">
           {mode === "inline"
             ? <InlineView lines={lines} />
             : <SideBySideView lines={lines} />}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

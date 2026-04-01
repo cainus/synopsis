@@ -49,9 +49,9 @@ const defaultProps = {
   onGenerate: vi.fn(),
 };
 
-function getCollapseFor(buttonText: string) {
+function getCollapsibleFor(buttonText: string) {
   const btn = screen.getByText(buttonText);
-  return btn.closest("li")!.querySelector(".summary-collapse");
+  return btn.closest('[data-slot="collapsible"]')!;
 }
 
 describe("DetailsTab", () => {
@@ -87,52 +87,52 @@ describe("DetailsTab", () => {
 
   it("top-level items start collapsed and expand on click", async () => {
     render(<DetailsTab result={mockResult} {...defaultProps} />);
-    const collapse = getCollapseFor("Users now stay logged in longer");
-    expect(collapse).not.toHaveClass("open");
+    const collapsible = getCollapsibleFor("Users now stay logged in longer");
+    expect(collapsible).toHaveAttribute("data-closed", "");
 
     await userEvent.click(screen.getByText("Users now stay logged in longer"));
-    expect(collapse).toHaveClass("open");
+    expect(collapsible).toHaveAttribute("data-open", "");
 
     await userEvent.click(screen.getByText("Users now stay logged in longer"));
-    expect(collapse).not.toHaveClass("open");
+    expect(collapsible).toHaveAttribute("data-closed", "");
   });
 
   it("only one top-level item open at a time across sections", async () => {
     render(<DetailsTab result={mockResult} {...defaultProps} />);
-    const productCollapse = getCollapseFor("Users now stay logged in longer");
-    const techCollapse = getCollapseFor("Replaced session middleware with JWT middleware");
+    const productCollapsible = getCollapsibleFor("Users now stay logged in longer");
+    const techCollapsible = getCollapsibleFor("Replaced session middleware with JWT middleware");
 
     await userEvent.click(screen.getByText("Users now stay logged in longer"));
-    expect(productCollapse).toHaveClass("open");
+    expect(productCollapsible).toHaveAttribute("data-open", "");
 
     await userEvent.click(screen.getByText("Replaced session middleware with JWT middleware"));
-    expect(productCollapse).not.toHaveClass("open");
-    expect(techCollapse).toHaveClass("open");
+    expect(productCollapsible).toHaveAttribute("data-closed", "");
+    expect(techCollapsible).toHaveAttribute("data-open", "");
   });
 
   it("nested nodes with children are independently collapsible", async () => {
     render(<DetailsTab result={mockResult} {...defaultProps} />);
     await userEvent.click(screen.getByText("Replaced session middleware with JWT middleware"));
 
-    const nestedCollapse = getCollapseFor("New jwtAuth middleware validates tokens on each request");
-    expect(nestedCollapse).not.toHaveClass("open");
+    const nestedCollapsible = getCollapsibleFor("New jwtAuth middleware validates tokens on each request");
+    expect(nestedCollapsible).toHaveAttribute("data-closed", "");
 
     await userEvent.click(screen.getByText("New jwtAuth middleware validates tokens on each request"));
-    expect(nestedCollapse).toHaveClass("open");
+    expect(nestedCollapsible).toHaveAttribute("data-open", "");
   });
 
   it("renders snippet links for items with a file", () => {
     render(<DetailsTab result={mockResult} {...defaultProps} />);
     const fileLinks = screen.getAllByText("auth.ts");
     expect(fileLinks.length).toBeGreaterThan(0);
-    expect(fileLinks[0]).toHaveClass("summary-file-link");
+    expect(fileLinks[0].className).toContain("font-mono");
   });
 
   it("opens diff modal when snippet link is clicked", async () => {
     render(<DetailsTab result={mockResult} {...defaultProps} />);
     const authLink = screen.getAllByText("auth.ts")[0];
     await userEvent.click(authLink);
-    expect(document.querySelector(".diff-modal")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("hides section when there are no items", () => {

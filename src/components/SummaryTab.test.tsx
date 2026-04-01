@@ -58,6 +58,7 @@ describe("SummaryTab", () => {
     const empty: SummaryResult = { headline: "No changes", bullets: [] };
     render(<SummaryTab result={empty} {...defaultProps} />);
     expect(screen.getByText("No changes")).toBeInTheDocument();
-    expect(document.querySelector(".summary-bullets")).not.toBeInTheDocument();
+    // No bullet list rendered when bullets array is empty
+    expect(document.querySelector("ul")).not.toBeInTheDocument();
   });
 });

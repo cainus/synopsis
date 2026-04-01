@@ -110,8 +110,8 @@ describe("FolderPicker", () => {
       />
     );
     await userEvent.click(screen.getByText(/recent/i));
-    expect(screen.getByText("/home/user/other")).toBeInTheDocument();
-    expect(screen.getByText("/home/user/third")).toBeInTheDocument();
+    expect(await screen.findByText("/home/user/other")).toBeInTheDocument();
+    expect(await screen.findByText("/home/user/third")).toBeInTheDocument();
   });
 
   it("does not show the current repo path in the recents dropdown", async () => {
@@ -124,8 +124,9 @@ describe("FolderPicker", () => {
       />
     );
     await userEvent.click(screen.getByText(/recent/i));
-    const buttons = screen.getAllByRole("button");
-    const paths = buttons.map((b) => b.textContent);
+    // The dropdown items should not include the current path
+    const menuItems = document.querySelectorAll('[data-slot="menu-item"]');
+    const paths = Array.from(menuItems).map((el) => el.textContent);
     expect(paths).not.toContain("/home/user/myrepo");
   });
 
@@ -140,7 +141,7 @@ describe("FolderPicker", () => {
       />
     );
     await userEvent.click(screen.getByText(/recent/i));
-    await userEvent.click(screen.getByText("/home/user/other"));
+    await userEvent.click(await screen.findByText("/home/user/other"));
     expect(onPick).toHaveBeenCalledWith("/home/user/other");
   });
 });

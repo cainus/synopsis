@@ -10,21 +10,23 @@ Synopsis is a Tauri v2 desktop app with a Rust backend and a React + TypeScript 
 | Backend | Rust |
 | Frontend | React 18 + TypeScript |
 | Build tool | Vite |
-| Styling | Plain CSS |
+| Styling | Tailwind CSS v4 + shadcn/ui |
 
 ## Directory structure
 
 ```
 synopsis/
 ├── src/                        # React frontend
-│   ├── App.tsx                 # Root component, tab routing
-│   ├── App.css                 # All styles
+│   ├── App.tsx                 # Root component, tab routing (uses shadcn Tabs)
+│   ├── index.css               # Tailwind + shadcn theme (dark mode variables)
 │   ├── types.ts                # Shared TypeScript types
+│   ├── lib/
+│   │   └── utils.ts            # cn() utility for Tailwind class merging
 │   ├── hooks/
 │   │   └── useRepo.ts          # Data fetching hook
 │   └── components/
+│       ├── ui/                 # shadcn/ui primitives (button, tabs, table, badge, dialog, dropdown-menu, collapsible)
 │       ├── FolderPicker.tsx     # Folder selection + refresh button
-│       ├── TabBar.tsx           # Tab navigation
 │       ├── DeltaTab.tsx         # Delta tab view
 │       ├── SummaryTab.tsx       # Summary tab view (headline + paragraph)
 │       ├── DetailsTab.tsx      # Details tab view (hierarchical changes)
