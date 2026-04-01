@@ -1,0 +1,27 @@
+src/index.css
+  7e460731a4a5c03b 1
+tsconfig.json
+  7e460731a4a5c03b 18-22
+vite.config.ts
+  7e460731a4a5c03b 1,4,7-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.3",
+  "base_commit_sha": "66667138e3babbe22c2314e2a451254a95861e1e",
+  "prompts": {
+    "7e460731a4a5c03b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb9e8642-6407-4f9e-824e-8dd91e203495",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Greggory Caines",
+      "messages": [],
+      "total_additions": 14,
+      "total_deletions": 2,
+      "accepted_lines": 14,
+      "overriden_lines": 0
+    }
+  }
+}
