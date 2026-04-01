@@ -1,0 +1,53 @@
+src/components/TestsTab.test.tsx
+  7e460731a4a5c03b 38-39,53,55-57,65,67-68,74,76-77,79,82,84-85,89,97,99-104,107,109-113,122,124-125,130-131,136,138-140,142-145,150-151,154-155,158-161,164,166-167,169-170,172,174-176
+src/App.tsx
+  7e460731a4a5c03b 2,33-39,45-47,51-55,57-71,73-79,81-88
+src/components/DeltaTab.test.tsx
+  7e460731a4a5c03b 52,59
+src/components/SummaryTab.test.tsx
+  7e460731a4a5c03b 61-62
+src/components/DiagramsTab.tsx
+  7e460731a4a5c03b 3,32,35-47,51,55-56,63-64,71-73,75-77,80,83-84,86-88,91
+src/components/FolderPicker.tsx
+  7e460731a4a5c03b 1,4-10,43-46,48-49,51-63,67-72
+src/components/DetailsTab.tsx
+  7e460731a4a5c03b 2-7,22,33-35,39-44,50-60,65-66,89-91,97-108,113-115,142,146-147,154-155,164
+src/components/DeltaTab.tsx
+  7e460731a4a5c03b 3-12,22-27,48-49,54,56-57,65-66,68-69,71-80,82-85,87-91,93-103
+src/components/DetailsTab.test.tsx
+  7e460731a4a5c03b 52,54,90-91,94,97,102-103,106,109-110,117-118,121,128,135
+src/components/TestsTab.tsx
+  7e460731a4a5c03b 2-6,51-63,76-81,92-93,96-97,101-108,117-122,135,137-138,144,155,160-169,171-175
+src/components/DiffModal.tsx
+  7e460731a4a5c03b 1-8,18-29,32,48-50,66-67,69-70,73-74,78-79,85-86,88,91,93,106-117,119-125,127-129,132-133,138-139
+index.html
+  7e460731a4a5c03b 2
+src/components/FolderPicker.test.tsx
+  7e460731a4a5c03b 113-114,127-129,144
+src/components/SummaryTab.tsx
+  7e460731a4a5c03b 1,12,16-17,24-25,34-35,37,39-43
+spec/architecture.md
+  7e460731a4a5c03b 13,20-21,23-24,28
+src/main.tsx
+  7e460731a4a5c03b 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.3",
+  "base_commit_sha": "302ee6f24d38d8687d21900e5ea45b29a976cd5f",
+  "prompts": {
+    "7e460731a4a5c03b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb9e8642-6407-4f9e-824e-8dd91e203495",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Greggory Caines",
+      "messages": [],
+      "total_additions": 542,
+      "total_deletions": 1466,
+      "accepted_lines": 489,
+      "overriden_lines": 0
+    }
+  }
+}
