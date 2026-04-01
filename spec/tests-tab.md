@@ -4,28 +4,29 @@ The Tests tab shows every test case that changed on the branch, along with a pla
 
 ## Display
 
-Test cases are grouped by file. Each file gets a monospace header, followed by its test case cards:
+Test cases are grouped by file. Each file has a collapsible header — only one file can be open at a time. File headers are coloured by status:
 
-```
-src/components/DeltaTab.test.tsx
-──────────────────────────────────────────
-DeltaTab > shows loading message
-New test.
+- **Green** — all tests in the file are new
+- **Yellow** — file has a mix of changes (modified, unchanged, new)
+- **Red** — all tests in the file are deleted
 
-auth/login.test.ts
-──────────────────────────────────────────
-auth > login > rejects invalid password
-Now throws an AuthError instead of returning false.
+Each test case shows an icon before the test name indicating its change type:
 
-formatDate > formats ISO strings
-No behaviour change.
-```
+| Icon | Colour | Meaning |
+|------|--------|---------|
+| `+` | Green (#4caf50) | New test |
+| `Δ` | Yellow (#ffb300) | Modified (behaviour changed) |
+| `−` | Red (#e06c75) | Deleted test |
+| (none) | Neutral | No behaviour change |
 
-- File path shown as a muted monospace header above each group
-- The test name is shown in monospace in `describe > describe > it` format
-- The behaviour description is shown below in normal text
-- "New test" (entirely new test with no removed lines) is rendered in green
-- "No behaviour change" is rendered in muted grey to make real changes stand out
+- New tests show only the `+` icon and test name (no "New test" label)
+- Modified tests show the `Δ` icon, test name, and a sentence describing what changed
+- Unchanged tests show just the test name and "No behaviour change" in muted grey
+- The test name is shown in monospace in `describe > describe > it` format (tree-split by `>`)
+
+### Clicking a test case
+
+Test cases with a diff snippet are clickable. Clicking opens the shared `DiffModal` showing the relevant diff hunk for that test. The modal title shows `file — test name`.
 
 ## Pipeline
 
@@ -74,6 +75,21 @@ All changed test names and their diff hunks are sent to `claude -p` in a single 
 ### 5. Parse the response
 
 Claude returns a JSON array. The response may be wrapped in a markdown code fence — the app strips this before parsing. If parsing fails, all tests are returned with "Unable to determine".
+
+## Data shape
+
+```ts
+interface TestCase {
+  full_name: string;        // full describe > it path
+  file: string;             // file path
+  behaviour_change: string; // "New test", "No behaviour change", or description
+  snippet: string;          // diff hunk for this test
+}
+
+interface TestsResult {
+  test_cases: TestCase[];
+}
+```
 
 ## Test file heuristics
 

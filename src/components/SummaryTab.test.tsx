@@ -1,119 +1,63 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SummaryTab } from "./SummaryTab";
+import type { SummaryResult } from "../types";
+
+const mockResult: SummaryResult = {
+  headline: "Refactored auth module to use JWT tokens",
+  bullets: [
+    { label: "Auth", text: "Replaced session-based auth with JWT tokens across all endpoints" },
+    { label: "Middleware", text: "New jwtAuth middleware validates and decodes tokens on each request" },
+    { label: "Dependencies", text: "Removed connect-redis and express-session packages" },
+  ],
+};
+
+const defaultProps = {
+  loading: false,
+  hasRepo: true,
+  onGenerate: vi.fn(),
+};
 
 describe("SummaryTab", () => {
   it("shows empty state before a repo is picked", () => {
-    render(
-      <SummaryTab
-        lines={[]}
-        loading={false}
-        done={false}
-        hasRepo={false}
-        onGenerate={vi.fn()}
-      />
-    );
+    render(<SummaryTab result={null} {...defaultProps} hasRepo={false} />);
     expect(screen.getByText(/pick a repo folder/i)).toBeInTheDocument();
   });
 
   it("shows generate button when repo is picked but summary not started", () => {
-    render(
-      <SummaryTab
-        lines={[]}
-        loading={false}
-        done={false}
-        hasRepo={true}
-        onGenerate={vi.fn()}
-      />
-    );
-    expect(
-      screen.getByRole("button", { name: /generate summary/i })
-    ).toBeInTheDocument();
+    render(<SummaryTab result={null} {...defaultProps} />);
+    expect(screen.getByRole("button", { name: /generate summary/i })).toBeInTheDocument();
   });
 
   it("calls onGenerate when the button is clicked", async () => {
     const onGenerate = vi.fn();
-    render(
-      <SummaryTab
-        lines={[]}
-        loading={false}
-        done={false}
-        hasRepo={true}
-        onGenerate={onGenerate}
-      />
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: /generate summary/i })
-    );
+    render(<SummaryTab result={null} {...defaultProps} onGenerate={onGenerate} />);
+    await userEvent.click(screen.getByRole("button", { name: /generate summary/i }));
     expect(onGenerate).toHaveBeenCalledOnce();
   });
 
-  it("shows spinner while loading with no output yet", () => {
-    render(
-      <SummaryTab
-        lines={[]}
-        loading={true}
-        done={false}
-        hasRepo={true}
-        onGenerate={vi.fn()}
-      />
-    );
-    expect(screen.getByText(/claude is thinking/i)).toBeInTheDocument();
-    expect(document.querySelector(".spinner")).toBeInTheDocument();
+  it("shows spinner while loading", () => {
+    render(<SummaryTab result={null} {...defaultProps} loading={true} />);
+    expect(screen.getByText(/thinking/i)).toBeInTheDocument();
   });
 
-  it("renders streamed lines as text", () => {
-    render(
-      <SummaryTab
-        lines={["First line", "Second line"]}
-        loading={true}
-        done={false}
-        hasRepo={true}
-        onGenerate={vi.fn()}
-      />
-    );
-    expect(screen.getByText(/First line/)).toBeInTheDocument();
-    expect(screen.getByText(/Second line/)).toBeInTheDocument();
+  it("renders headline", () => {
+    render(<SummaryTab result={mockResult} {...defaultProps} />);
+    expect(screen.getByText(mockResult.headline)).toBeInTheDocument();
   });
 
-  it("renders markdown formatting", () => {
-    render(
-      <SummaryTab
-        lines={["## Summary", "- item one", "- item two"]}
-        loading={false}
-        done={true}
-        hasRepo={true}
-        onGenerate={vi.fn()}
-      />
-    );
-    expect(screen.getByRole("heading", { name: /summary/i })).toBeInTheDocument();
-    expect(screen.getByText("item one")).toBeInTheDocument();
-    expect(screen.getByText("item two")).toBeInTheDocument();
+  it("renders bullet labels and text", () => {
+    render(<SummaryTab result={mockResult} {...defaultProps} />);
+    expect(screen.getByText("Auth")).toBeInTheDocument();
+    expect(screen.getByText("Middleware")).toBeInTheDocument();
+    expect(screen.getByText("Dependencies")).toBeInTheDocument();
+    expect(screen.getByText(/Replaced session-based auth/)).toBeInTheDocument();
   });
 
-  it("shows a blinking cursor while loading with partial output", () => {
-    render(
-      <SummaryTab
-        lines={["partial output"]}
-        loading={true}
-        done={false}
-        hasRepo={true}
-        onGenerate={vi.fn()}
-      />
-    );
-    expect(screen.getByText("▌")).toBeInTheDocument();
-  });
-
-  it("hides the cursor once done", () => {
-    render(
-      <SummaryTab
-        lines={["complete output"]}
-        loading={false}
-        done={true}
-        hasRepo={true}
-        onGenerate={vi.fn()}
-      />
-    );
-    expect(screen.queryByText("▌")).not.toBeInTheDocument();
+  it("renders no bullets when empty", () => {
+    const empty: SummaryResult = { headline: "No changes", bullets: [] };
+    render(<SummaryTab result={empty} {...defaultProps} />);
+    expect(screen.getByText("No changes")).toBeInTheDocument();
+    expect(document.querySelector(".summary-bullets")).not.toBeInTheDocument();
   });
 });

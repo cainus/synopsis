@@ -1,24 +1,16 @@
-import { useRef, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
+import type { SummaryResult } from "../types";
 
 interface Props {
-  lines: string[];
+  result: SummaryResult | null;
   loading: boolean;
-  done: boolean;
   hasRepo: boolean;
   onGenerate: () => void;
 }
 
-export function SummaryTab({ lines, loading, done, hasRepo, onGenerate }: Props) {
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [lines]);
-
+export function SummaryTab({ result, loading, hasRepo, onGenerate }: Props) {
   if (!hasRepo) return <div className="status empty">Pick a repo folder to generate a summary.</div>;
 
-  if (!loading && !done && lines.length === 0) {
+  if (!loading && !result) {
     return (
       <div className="generate-prompt">
         <button onClick={onGenerate}>Generate Summary</button>
@@ -26,24 +18,30 @@ export function SummaryTab({ lines, loading, done, hasRepo, onGenerate }: Props)
     );
   }
 
-  if (loading && lines.length === 0) {
+  if (loading) {
     return (
       <div className="thinking">
         <span className="spinner" />
-        Claude is thinking…
+        Thinking…
       </div>
     );
   }
 
-  const text = lines.join("\n");
+  if (!result) return null;
 
   return (
     <div className="summary-tab">
-      <div className="summary-content">
-        <ReactMarkdown>{text}</ReactMarkdown>
-        {loading && <span className="cursor">▌</span>}
-      </div>
-      <div ref={bottomRef} />
+      <p className="summary-headline">{result.headline}</p>
+      {result.bullets.length > 0 && (
+        <ul className="summary-bullets">
+          {result.bullets.map((b, i) => (
+            <li key={i} className="summary-bullet">
+              <span className="summary-bullet-label">{b.label}</span>
+              <span className="summary-bullet-text">{b.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

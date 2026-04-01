@@ -46,7 +46,7 @@ export function DiagramsTab({ result, loading, hasRepo, onGenerate }: Props) {
     return (
       <div className="thinking">
         <span className="spinner" />
-        Claude is thinking…
+        Thinking…
       </div>
     );
   }

@@ -2,35 +2,67 @@
 
 The Delta tab shows which files changed, and how many lines were added or removed in each. What "changed" means depends on context:
 
-- **On a feature branch:** files changed vs the default branch (`default-branch...HEAD`)
-- **On the default branch:** uncommitted changes vs HEAD (`git diff HEAD`)
+- **On a feature branch:** files changed vs the default branch
+- **On the default branch:** uncommitted and untracked changes
 
 ## Display
 
 Each changed file is shown as a table row:
 
 ```
-File                       Added   Removed
-src/components/App.tsx     +24     -3
-src/hooks/useRepo.ts       +11     -0
-src/types.ts               +8      -2
-─────────────────────────────────────────
-Total (3 files)            +43     -5
+File                       Status     Added   Removed
+src/components/App.tsx     tracked    +24     -3
+src/hooks/useRepo.ts       tracked    +11     -0
+src/types.ts               untracked  +8      -0
+─────────────────────────────────────────────────────
+Total (3 files)                       +43     -3
 ```
 
+- File names are coloured by status: **green** for added, **yellow** for modified, **red** for deleted
+- Each file has a badge showing "tracked" or "untracked"
 - Added line counts are green
 - Removed line counts are red
 - A totals row at the bottom sums all files
+- Rows are clickable — clicking opens a diff modal showing the full file diff with inline/side-by-side toggle
+
+### File status detection
+
+File status is determined via `git diff --name-status <default-branch>`:
+- `A` → added (green)
+- `D` → deleted (red)
+- All others → modified (yellow)
+
+Untracked files (on default branch only) are always classified as "added".
 
 ## Git commands
 
-**Feature branch:**
+**Diff stats:**
 ```
 git diff --numstat <default-branch>
 ```
-Three-dot range compares against the merge base, so only what this branch introduced is shown.
+
+**File statuses:**
+```
+git diff --name-status <default-branch>
+```
 
 A two-dot (working-tree) diff is used so that staged and unstaged local changes are included, and so that changes are visible even when HEAD is the default branch itself (e.g. working directly on main).
+
+**Untracked files** (when on default branch only):
+```
+git ls-files --others --exclude-standard
+```
+
+Untracked files are counted by reading the file and counting lines.
+
+## Diff modal
+
+Clicking a file row calls `get_file_diff(repo_path, file)` which runs `git diff <default-branch> -- <file>` and returns the raw diff text. The shared `DiffModal` component renders it with:
+
+- **Inline view** (default): standard unified diff with colour-coded lines
+- **Side-by-side view**: left pane (old), right pane (new), paired by consecutive remove/add blocks
+- Toggle via buttons in the modal header
+- Closes on Escape or backdrop click
 
 ## Empty states
 

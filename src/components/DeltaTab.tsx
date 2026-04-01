@@ -1,11 +1,34 @@
+import { useState, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { DeltaResult } from "../types";
+import { DiffModal } from "./DiffModal";
 
 interface Props {
   result: DeltaResult | null;
   loading: boolean;
+  repoPath: string | null;
 }
 
-export function DeltaTab({ result, loading }: Props) {
+export function DeltaTab({ result, loading, repoPath }: Props) {
+  const [modalDiff, setModalDiff] = useState<string | null>(null);
+  const [modalFile, setModalFile] = useState("");
+
+  const openFile = useCallback(async (path: string) => {
+    if (!repoPath) return;
+    try {
+      const diff = await invoke<string>("get_file_diff", { repoPath, file: path });
+      setModalFile(path);
+      setModalDiff(diff);
+    } catch (e) {
+      console.error("Failed to get diff:", e);
+    }
+  }, [repoPath]);
+
+  const closeModal = useCallback(() => {
+    setModalDiff(null);
+    setModalFile("");
+  }, []);
+
   if (loading) return <div className="status">Loading diff…</div>;
   if (!result) return <div className="status empty">Pick a repo folder to see changes.</div>;
   const onDefaultBranch = result.current_branch === result.default_branch;
@@ -40,8 +63,8 @@ export function DeltaTab({ result, loading }: Props) {
         </thead>
         <tbody>
           {result.files.map((f) => (
-            <tr key={f.path}>
-              <td className="file-path">{f.path}</td>
+            <tr key={f.path} className="delta-row" onClick={() => openFile(f.path)}>
+              <td className={`file-path file-status-${f.status}`}>{f.path}</td>
               <td className="file-badge-cell">
                 <span className={`file-badge ${f.untracked ? "badge-untracked" : "badge-tracked"}`}>
                   {f.untracked ? "untracked" : "tracked"}
@@ -60,6 +83,9 @@ export function DeltaTab({ result, loading }: Props) {
           </tr>
         </tfoot>
       </table>
+      {modalDiff !== null && (
+        <DiffModal diff={modalDiff} title={modalFile} onClose={closeModal} />
+      )}
     </div>
   );
 }

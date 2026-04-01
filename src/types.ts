@@ -3,6 +3,7 @@ export interface FileStat {
   added: number;
   removed: number;
   untracked: boolean;
+  status: "added" | "deleted" | "modified";
 }
 
 export interface DeltaResult {
@@ -15,10 +16,33 @@ export interface TestCase {
   full_name: string;
   file: string;
   behaviour_change: string;
+  snippet: string;
 }
 
 export interface TestsResult {
   test_cases: TestCase[];
+}
+
+export interface SummaryChangeItem {
+  title: string;
+  children: SummaryChangeItem[];
+  file: string;
+  snippet: string;
+}
+
+export interface SummaryBullet {
+  label: string;
+  text: string;
+}
+
+export interface SummaryResult {
+  headline: string;
+  bullets: SummaryBullet[];
+}
+
+export interface DetailsResult {
+  product_changes: SummaryChangeItem[];
+  technical_changes: SummaryChangeItem[];
 }
 
 export interface DiagramsResult {
@@ -28,4 +52,4 @@ export interface DiagramsResult {
   after_caption: string;
 }
 
-export type TabName = "delta" | "summary" | "tests" | "diagrams";
+export type TabName = "summary" | "details" | "delta" | "tests" | "diagrams";

@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::process::{Command, Stdio};
 use tauri::Emitter;
 
@@ -8,6 +8,7 @@ pub struct FileStat {
     pub added: u32,
     pub removed: u32,
     pub untracked: bool,
+    pub status: String, // "added", "deleted", "modified"
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -22,11 +23,41 @@ pub struct TestCase {
     pub full_name: String,
     pub file: String,
     pub behaviour_change: String,
+    pub snippet: String,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct TestsResult {
     pub test_cases: Vec<TestCase>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct SummaryChangeItem {
+    pub title: String,
+    #[serde(default)]
+    pub children: Vec<SummaryChangeItem>,
+    #[serde(default)]
+    pub file: String,
+    #[serde(default)]
+    pub snippet: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct SummaryBullet {
+    pub label: String,
+    pub text: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct SummaryResult {
+    pub headline: String,
+    pub bullets: Vec<SummaryBullet>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct DetailsResult {
+    pub product_changes: Vec<SummaryChangeItem>,
+    pub technical_changes: Vec<SummaryChangeItem>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -95,6 +126,22 @@ pub async fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
     // correctly when HEAD is the default branch itself (e.g. working on main).
     let out = run_git(&repo_path, &["diff", "--numstat", &default_branch])?;
 
+    // Get file statuses (A=added, D=deleted, M=modified, etc.)
+    let status_out = run_git(&repo_path, &["diff", "--name-status", &default_branch])
+        .unwrap_or_default();
+    let mut status_map = std::collections::HashMap::new();
+    for line in status_out.lines() {
+        let parts: Vec<&str> = line.splitn(2, '\t').collect();
+        if parts.len() == 2 {
+            let status = match parts[0].chars().next().unwrap_or('M') {
+                'A' => "added",
+                'D' => "deleted",
+                _ => "modified",
+            };
+            status_map.insert(parts[1].to_string(), status);
+        }
+    }
+
     let mut files = Vec::new();
     for line in out.lines() {
         let parts: Vec<&str> = line.splitn(3, '\t').collect();
@@ -102,11 +149,17 @@ pub async fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
             let added = parts[0].parse::<u32>().unwrap_or(0);
             let removed = parts[1].parse::<u32>().unwrap_or(0);
             let path = parts[2].to_string();
+            let status = status_map
+                .get(&path)
+                .copied()
+                .unwrap_or("modified")
+                .to_string();
             files.push(FileStat {
                 path,
                 added,
                 removed,
                 untracked: false,
+                status,
             });
         }
     }
@@ -128,6 +181,7 @@ pub async fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
                 added,
                 removed: 0,
                 untracked: true,
+                status: "added".to_string(),
             });
         }
     }
@@ -140,24 +194,39 @@ pub async fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
 }
 
 #[tauri::command]
-pub async fn get_summary(repo_path: String, window: tauri::Window) -> Result<(), String> {
+pub async fn get_summary(repo_path: String) -> Result<SummaryResult, String> {
     let branch = detect_default_branch(&repo_path);
 
-    // Two-dot diff — same approach as get_delta
     let diff_output = Command::new("git")
         .args(["-C", &repo_path, "diff", &branch])
         .output()
         .map_err(|e| format!("Failed to run git diff: {}", e))?;
 
     if diff_output.stdout.is_empty() {
-        let _ = window.emit("summary-chunk", "No changes found vs the default branch.");
-        let _ = window.emit("summary-done", ());
-        return Ok(());
+        return Ok(SummaryResult {
+            headline: "No changes found vs the default branch.".into(),
+            bullets: vec![],
+        });
     }
 
-    // Pipe diff into claude -p
+    let prompt = r#"Analyze these code changes and produce a brief structured summary.
+
+Respond with ONLY a JSON object with these fields:
+- "headline": a one-sentence summary of all changes in under 15 words
+- "bullets": an array of 3-5 key points, each with:
+  - "label": a bold category label (1-3 words, e.g. "New feature", "Bug fix", "Refactor", "API change", "Dependencies", "Config", "Tests", "Performance")
+  - "text": a single sentence (under 15 words) describing what changed
+
+Rules:
+- Each bullet should cover a distinct aspect of the changes
+- Labels should be short category tags, not sentences
+- Text should be specific and concrete, not vague
+- Total word count across all bullets should stay under 80 words
+- No markdown in values — plain text only
+- No explanation outside the JSON"#;
+
     let mut child = Command::new("claude")
-        .args(["-p", "Summarize these code changes concisely for a developer. Focus on what changed and why it matters. Be brief."])
+        .args(["-p", prompt])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -165,25 +234,114 @@ pub async fn get_summary(repo_path: String, window: tauri::Window) -> Result<(),
         .map_err(|e| format!("Failed to start claude: {}", e))?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(&diff_output.stdout)
-            .map_err(|e| format!("Failed to write to claude stdin: {}", e))?;
+        let _ = stdin.write_all(&diff_output.stdout);
     }
 
-    let stdout = child.stdout.take().ok_or("No stdout")?;
-    let reader = BufReader::new(stdout);
-    for line in reader.lines() {
-        match line {
-            Ok(l) => {
-                let _ = window.emit("summary-chunk", l);
-            }
-            Err(_) => break,
-        }
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed to wait for claude: {}", e))?;
+
+    let response = String::from_utf8_lossy(&output.stdout).to_string();
+    let json_str = extract_json_object(&response);
+
+    let parsed: SummaryResult = serde_json::from_str(&json_str).map_err(|e| {
+        format!("Failed to parse Claude response: {}\nRaw: {}", e, response)
+    })?;
+
+    Ok(parsed)
+}
+
+#[tauri::command]
+pub async fn get_details(repo_path: String) -> Result<DetailsResult, String> {
+    let branch = detect_default_branch(&repo_path);
+
+    let diff_output = Command::new("git")
+        .args(["-C", &repo_path, "diff", &branch])
+        .output()
+        .map_err(|e| format!("Failed to run git diff: {}", e))?;
+
+    if diff_output.stdout.is_empty() {
+        return Ok(DetailsResult {
+            product_changes: vec![],
+            technical_changes: vec![],
+        });
     }
 
-    let _ = child.wait();
-    let _ = window.emit("summary-done", ());
-    Ok(())
+    let prompt = r#"Analyze these code changes and produce a detailed breakdown.
+
+Respond with ONLY a JSON object with these fields:
+- "product_changes": array (max 4) of user-facing/product changes. Empty array if none.
+- "technical_changes": array (max 4) of technical/architectural changes.
+
+Each item has shape: {"title": "...", "children": [...], "file": "...", "snippet": "..."}
+The tree is recursive — children have the same shape. Leaf nodes use "children": [].
+"file" is the file path from the diff (e.g. "src/App.tsx"). Use "" if not applicable.
+"snippet" is the relevant few lines copied verbatim from the diff input — only the specific lines that relate to this item, not the whole file diff. Use "" if not applicable.
+
+CRITICAL depth rules:
+- Top-level titles: short scannable label (under 12 words), these are clickable headings
+- Level-2 children: descriptive sentences that explain the change in detail (20-40 words each). These are the main content — be thorough and informative here. Every top-level item MUST have 2-4 children at this level.
+- Level-3 children: supporting specifics where helpful (file names, API details, edge cases). Optional but encouraged when there is complexity to break down. Use 1-3 per parent.
+- You may go to level 4 if needed but no deeper.
+
+CRITICAL snippet rules:
+- Attach file + snippet at the most specific level — prefer leaf/detail nodes over top-level groupings
+- Every node that describes a concrete code change MUST have a file and snippet
+- Snippets should be SHORT: just the key lines (typically 3-15 lines). Include the @@ hunk header for context.
+- Copy lines verbatim from the diff — do not edit or summarize them
+- Nodes that are purely organizational groupings use "file": "" and "snippet": ""
+
+Example:
+{"product_changes": [], "technical_changes": [
+  {"title": "Auth now uses JWT instead of sessions", "file": "", "snippet": "", "children": [
+    {"title": "The express-session middleware was removed and replaced with jwtAuth", "file": "src/middleware/auth.ts", "snippet": "@@ -15,8 +15,10 @@\n-const session = require('express-session');\n+const { jwtAuth } = require('./jwtAuth');", "children": []},
+    {"title": "Session store dependency removed from package.json", "file": "package.json", "snippet": "@@ -12,3 +12,2 @@\n-    \"connect-redis\": \"^6.1.0\",", "children": []}
+  ]}
+]}
+
+Rules:
+- Maximum 4 top-level items per section
+- Level-2 children are mandatory and must be descriptive (not terse labels)
+- No markdown in values — plain text only
+- No explanation outside the JSON
+- Snippets must be valid diff lines copied from the input"#;
+
+    let mut child = Command::new("claude")
+        .args(["-p", prompt])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to start claude: {}", e))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(&diff_output.stdout);
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed to wait for claude: {}", e))?;
+
+    let response = String::from_utf8_lossy(&output.stdout).to_string();
+    let json_str = extract_json_object(&response);
+
+    let parsed: DetailsResult = serde_json::from_str(&json_str).map_err(|e| {
+        format!("Failed to parse Claude response: {}\nRaw: {}", e, response)
+    })?;
+
+    Ok(parsed)
+}
+
+#[tauri::command]
+pub async fn get_file_diff(repo_path: String, file: String) -> Result<String, String> {
+    let branch = detect_default_branch(&repo_path);
+
+    let output = Command::new("git")
+        .args(["-C", &repo_path, "diff", &branch, "--", &file])
+        .output()
+        .map_err(|e| format!("Failed to run git diff: {}", e))?;
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 fn is_test_file(path: &str) -> bool {
@@ -520,6 +678,7 @@ pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> 
                 full_name: name,
                 file,
                 behaviour_change: "New test".to_string(),
+                snippet: hunk,
             });
         } else {
             modified.push((name, hunk, file));
@@ -561,18 +720,25 @@ pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> 
 
     let claude_entries: Vec<ClaudeEntry> = serde_json::from_str(&json_str).unwrap_or_default();
 
-    // Map Claude results back to TestCase, preserving file from modified list
-    let file_by_name: std::collections::HashMap<&str, &str> = modified
+    // Map Claude results back to TestCase, preserving file and hunk from modified list
+    let meta_by_name: std::collections::HashMap<&str, (&str, &str)> = modified
         .iter()
-        .map(|(n, _, f)| (n.as_str(), f.as_str()))
+        .map(|(n, h, f)| (n.as_str(), (f.as_str(), h.as_str())))
         .collect();
 
     let mut claude_cases: Vec<TestCase> = claude_entries
         .into_iter()
-        .map(|e| TestCase {
-            file: file_by_name.get(e.full_name.as_str()).unwrap_or(&"").to_string(),
-            full_name: e.full_name,
-            behaviour_change: e.behaviour_change,
+        .map(|e| {
+            let (file, snippet) = meta_by_name
+                .get(e.full_name.as_str())
+                .copied()
+                .unwrap_or(("", ""));
+            TestCase {
+                file: file.to_string(),
+                full_name: e.full_name,
+                behaviour_change: e.behaviour_change,
+                snippet: snippet.to_string(),
+            }
         })
         .collect();
 
@@ -580,10 +746,11 @@ pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> 
     if claude_cases.is_empty() {
         claude_cases = modified
             .iter()
-            .map(|(name, _, file)| TestCase {
+            .map(|(name, hunk, file)| TestCase {
                 full_name: name.clone(),
                 file: file.clone(),
                 behaviour_change: "Unable to determine".to_string(),
+                snippet: hunk.clone(),
             })
             .collect();
     }
@@ -629,7 +796,9 @@ pub async fn get_diagrams(repo_path: String) -> Result<DiagramsResult, String> {
 
     let prompt = r#"Analyze these code changes and produce two Mermaid flowchart diagrams.
 
-"before": show the key components/functions/modules involved and how they related BEFORE this diff.
+IMPORTANT: Every node must represent a function or method. Do NOT use modules, files, classes, components, or any other non-function/method concepts as nodes. Every node label must be a function or method name (e.g. "myFunction()" or "MyClass.myMethod()").
+
+"before": show the key functions/methods involved and how they called each other BEFORE this diff.
   - Nodes that will be REMOVED (gone in after): class "removed" → fill:#3a1a1a,stroke:#f44336,color:#ccc
   - Nodes that will be MODIFIED (present in both but changed): class "modified" → fill:#3a2e00,stroke:#ffb300,color:#ccc
   - Unchanged nodes: no class
@@ -643,7 +812,7 @@ pub async fn get_diagrams(repo_path: String) -> Result<DiagramsResult, String> {
       extractedLogic["logic to extract"]
     end
 
-"after": show those same elements and new relationships AFTER this diff.
+"after": show those same functions/methods and new call relationships AFTER this diff.
   - Nodes that are NEW (only in after): class "added" → fill:#1a3a1a,stroke:#4caf50,color:#ccc
   - Nodes that were MODIFIED (present in both but changed): class "modified" → fill:#3a2e00,stroke:#ffb300,color:#ccc
   - Unchanged nodes: no class
@@ -653,8 +822,9 @@ pub async fn get_diagrams(repo_path: String) -> Result<DiagramsResult, String> {
 
 Rules:
 - Use `graph LR` direction for both
+- Every node is a function or method — no exceptions
 - Keep it focused, max ~12 nodes each
-- Use short readable node labels
+- Node labels must look like function calls: e.g. "doThing()" or "Foo.bar()"
 - Node IDs must be alphanumeric (no spaces or special chars)
 - Respond with ONLY a JSON object: {"before": "...", "after": "...", "before_caption": "...", "after_caption": "..."}
 - "before_caption" and "after_caption": one plain-English sentence each describing what the diagram shows

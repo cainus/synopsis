@@ -9,6 +9,8 @@ pub fn run() {
             git::pick_folder,
             git::get_delta,
             git::get_summary,
+            git::get_details,
+            git::get_file_diff,
             git::get_tests_result,
             git::get_diagrams,
         ])

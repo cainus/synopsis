@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { DeltaResult, DiagramsResult, TestsResult } from "../types";
+import type { DeltaResult, DetailsResult, DiagramsResult, SummaryResult, TestsResult } from "../types";
 
 const RECENTS_KEY = "synopsis_recent_paths";
 const MAX_RECENTS = 5;
@@ -22,6 +21,7 @@ function saveRecents(paths: string[]) {
 interface Loading {
   delta: boolean;
   summary: boolean;
+  details: boolean;
   tests: boolean;
   diagrams: boolean;
 }
@@ -32,13 +32,14 @@ interface RepoState {
   refresh: () => void;
   recentPaths: string[];
   deltaResult: DeltaResult | null;
-  summaryLines: string[];
-  summaryDone: boolean;
+  summaryResult: SummaryResult | null;
+  detailsResult: DetailsResult | null;
   testsResult: TestsResult | null;
   diagramsResult: DiagramsResult | null;
   loading: Loading;
   error: string | null;
   fetchSummary: () => void;
+  fetchDetails: () => void;
   fetchTests: () => void;
   fetchDiagrams: () => void;
 }
@@ -49,32 +50,33 @@ export function useRepo(): RepoState {
   const [repoPath, setRepoPathState] = useState<string | null>(initialRecents[0] ?? null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [deltaResult, setDeltaResult] = useState<DeltaResult | null>(null);
-  const [summaryLines, setSummaryLines] = useState<string[]>([]);
-  const [summaryDone, setSummaryDone] = useState(false);
+  const [summaryResult, setSummaryResult] = useState<SummaryResult | null>(null);
+  const [detailsResult, setDetailsResult] = useState<DetailsResult | null>(null);
   const [testsResult, setTestsResult] = useState<TestsResult | null>(null);
   const [diagramsResult, setDiagramsResult] = useState<DiagramsResult | null>(null);
   const [loading, setLoading] = useState<Loading>({
     delta: false,
     summary: false,
+    details: false,
     tests: false,
     diagrams: false,
   });
   const [error, setError] = useState<string | null>(null);
 
   const summaryFetched = useRef(false);
+  const detailsFetched = useRef(false);
   const testsFetched = useRef(false);
   const diagramsFetched = useRef(false);
-  const unlistenSummaryChunk = useRef<UnlistenFn | null>(null);
-  const unlistenSummaryDone = useRef<UnlistenFn | null>(null);
 
   function resetState() {
     setDeltaResult(null);
-    setSummaryLines([]);
-    setSummaryDone(false);
+    setSummaryResult(null);
+    setDetailsResult(null);
     setTestsResult(null);
     setDiagramsResult(null);
     setError(null);
     summaryFetched.current = false;
+    detailsFetched.current = false;
     testsFetched.current = false;
     diagramsFetched.current = false;
   }
@@ -95,7 +97,7 @@ export function useRepo(): RepoState {
     setRefreshKey((k) => k + 1);
   }
 
-  // Eagerly fetch delta when repoPath changes or refresh is triggered
+  // Eagerly fetch delta and summary when repoPath changes or refresh is triggered
   useEffect(() => {
     if (!repoPath) return;
     setLoading((l) => ({ ...l, delta: true }));
@@ -103,38 +105,30 @@ export function useRepo(): RepoState {
       .then((result) => setDeltaResult(result))
       .catch((e) => setError(String(e)))
       .finally(() => setLoading((l) => ({ ...l, delta: false })));
+    fetchSummary();
   }, [repoPath, refreshKey]);
 
   function fetchSummary() {
     if (!repoPath || summaryFetched.current) return;
     summaryFetched.current = true;
-    setSummaryLines([]);
-    setSummaryDone(false);
     setLoading((l) => ({ ...l, summary: true }));
+    invoke<SummaryResult>("get_summary", { repoPath })
+      .then((result) => {
+        setSummaryResult(result);
+        fetchDetails();
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading((l) => ({ ...l, summary: false })));
+  }
 
-    // Clean up old listeners
-    unlistenSummaryChunk.current?.();
-    unlistenSummaryDone.current?.();
-
-    listen<string>("summary-chunk", (event) => {
-      setSummaryLines((lines) => [...lines, event.payload]);
-    }).then((fn) => {
-      unlistenSummaryChunk.current = fn;
-    });
-
-    listen("summary-done", () => {
-      setSummaryDone(true);
-      setLoading((l) => ({ ...l, summary: false }));
-      unlistenSummaryChunk.current?.();
-      unlistenSummaryDone.current?.();
-    }).then((fn) => {
-      unlistenSummaryDone.current = fn;
-    });
-
-    invoke("get_summary", { repoPath }).catch((e) => {
-      setError(String(e));
-      setLoading((l) => ({ ...l, summary: false }));
-    });
+  function fetchDetails() {
+    if (!repoPath || detailsFetched.current) return;
+    detailsFetched.current = true;
+    setLoading((l) => ({ ...l, details: true }));
+    invoke<DetailsResult>("get_details", { repoPath })
+      .then((result) => setDetailsResult(result))
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading((l) => ({ ...l, details: false })));
   }
 
   function fetchTests() {
@@ -163,13 +157,14 @@ export function useRepo(): RepoState {
     refresh,
     recentPaths,
     deltaResult,
-    summaryLines,
-    summaryDone,
+    summaryResult,
+    detailsResult,
     testsResult,
     diagramsResult,
     loading,
     error,
     fetchSummary,
+    fetchDetails,
     fetchTests,
     fetchDiagrams,
   };

@@ -6,19 +6,19 @@ const result: DeltaResult = {
   default_branch: "main",
   current_branch: "feature/foo",
   files: [
-    { path: "src/app.ts", added: 7, removed: 3, untracked: false },
-    { path: "src/utils.ts", added: 4, removed: 5, untracked: false },
+    { path: "src/app.ts", added: 7, removed: 3, untracked: false, status: "modified" as const },
+    { path: "src/utils.ts", added: 4, removed: 5, untracked: false, status: "modified" as const },
   ],
 };
 
 describe("DeltaTab", () => {
   it("shows loading message while fetching", () => {
-    render(<DeltaTab result={null} loading={true} />);
+    render(<DeltaTab result={null} loading={true} repoPath="/test" />);
     expect(screen.getByText(/loading diff/i)).toBeInTheDocument();
   });
 
   it("shows empty state before a repo is picked", () => {
-    render(<DeltaTab result={null} loading={false} />);
+    render(<DeltaTab result={null} loading={false} repoPath="/test" />);
     expect(screen.getByText(/pick a repo folder/i)).toBeInTheDocument();
   });
 
@@ -27,6 +27,7 @@ describe("DeltaTab", () => {
       <DeltaTab
         result={{ default_branch: "main", current_branch: "feature/foo", files: [] }}
         loading={false}
+        repoPath="/test"
       />
     );
     expect(screen.getByText(/no changes vs/i)).toBeInTheDocument();
@@ -34,32 +35,32 @@ describe("DeltaTab", () => {
   });
 
   it("renders the branch name", () => {
-    render(<DeltaTab result={result} loading={false} />);
+    render(<DeltaTab result={result} loading={false} repoPath="/test" />);
     expect(screen.getByText("main")).toBeInTheDocument();
   });
 
   it("renders each changed file path", () => {
-    render(<DeltaTab result={result} loading={false} />);
+    render(<DeltaTab result={result} loading={false} repoPath="/test" />);
     expect(screen.getByText("src/app.ts")).toBeInTheDocument();
     expect(screen.getByText("src/utils.ts")).toBeInTheDocument();
   });
 
   it("renders added lines in green with + prefix", () => {
-    render(<DeltaTab result={result} loading={false} />);
+    render(<DeltaTab result={result} loading={false} repoPath="/test" />);
     const added = screen.getAllByText(/^\+\d+/);
     expect(added.length).toBeGreaterThan(0);
     added.forEach((el) => expect(el).toHaveClass("added"));
   });
 
   it("renders removed lines in red with - prefix", () => {
-    render(<DeltaTab result={result} loading={false} />);
+    render(<DeltaTab result={result} loading={false} repoPath="/test" />);
     const removed = screen.getAllByText(/^-\d+/);
     expect(removed.length).toBeGreaterThan(0);
     removed.forEach((el) => expect(el).toHaveClass("removed"));
   });
 
   it("renders correct totals in the footer", () => {
-    render(<DeltaTab result={result} loading={false} />);
+    render(<DeltaTab result={result} loading={false} repoPath="/test" />);
     // total added = 7+4 = 11, total removed = 3+5 = 8 (neither matches any individual file)
     expect(screen.getByText("+11")).toBeInTheDocument();
     expect(screen.getByText("-8")).toBeInTheDocument();

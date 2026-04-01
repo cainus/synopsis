@@ -12,7 +12,8 @@ All feature behaviour is documented in `/spec`. **When making any change to beha
 |------|--------|
 | `spec/overview.md` | Product overview, core flow, tab summary |
 | `spec/delta-tab.md` | Delta tab: file list, git command, empty states |
-| `spec/summary-tab.md` | Summary tab: streaming, Claude prompt, events |
+| `spec/summary-tab.md` | Summary tab: headline + paragraph, Claude prompt |
+| `spec/details-tab.md` | Details tab: hierarchical product/technical changes, snippets, Claude prompt |
 | `spec/tests-tab.md` | Tests tab: full pipeline, test file heuristics, Claude prompt |
 | `spec/diagrams-tab.md` | Diagrams tab: before/after Mermaid impact graphs, Claude prompt |
 | `spec/architecture.md` | Stack, directory structure, commands, data flow |
@@ -52,3 +53,4 @@ cd src-tauri && cargo test        # Rust unit tests
 - No component library — plain CSS in `src/App.css`
 - All TypeScript types mirroring Rust structs live in `src/types.ts`
 - Behaviour changes must be reflected in the relevant `spec/` file
+- **Always use the `/pingpong` skill (TDD ping-pong) to implement any changes to source code**
