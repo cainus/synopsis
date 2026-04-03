@@ -1,0 +1,43 @@
+src/types.ts
+  7e460731a4a5c03b 26-30,34
+src-tauri/src/git.rs
+  7e460731a4a5c03b 35-41,48,282,284-288,292-294,297-301,303,305-310,314-316,325-326
+src/App.tsx
+  7e460731a4a5c03b 77
+spec/details-tab.md
+  7e460731a4a5c03b 43,45-49,51,56-58,74-78,82,92-96,100
+src/components/SummaryTab.tsx
+  7e460731a4a5c03b 1,12-14,16,18
+src/components/DetailsTab.test.tsx
+  7e460731a4a5c03b 10,12-13,20,22,25,27,34,36,46,60,66-67,115,117-118,121,123-126,129,131-152,154-157
+src/components/ui/dialog.tsx
+  7e460731a4a5c03b 56
+src/components/SummaryTab.test.tsx
+  7e460731a4a5c03b 26,32-33
+src/components/DiagramsTab.tsx
+  7e460731a4a5c03b 50-52,54,56
+src/components/DiffModal.tsx
+  7e460731a4a5c03b 9,20-21,26-30,33-67,71,73-79,85-88,92-96,102-110,112-113,116,118-119,122,124-125,131-132,134-135,138-140,144-147,154,156-159,162,164-167,177-184,188,212-214
+src/components/DetailsTab.tsx
+  7e460731a4a5c03b 1-3,10-16,24,27-28,31-33,35,40,48,51-65,78,83,98,105,117-118,121-126,128-149,158-245,249,251-252,257-259,263-264,267-269,271,273,284-287,292-300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "150b9250e942b32f8ff86ca061996d3a0acfc45b",
+  "prompts": {
+    "7e460731a4a5c03b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb9e8642-6407-4f9e-824e-8dd91e203495",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Greggory Caines",
+      "messages": [],
+      "total_additions": 524,
+      "total_deletions": 272,
+      "accepted_lines": 441,
+      "overriden_lines": 0
+    }
+  }
+}
