@@ -1,7 +1,9 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { CodeXmlIcon, FileCodeIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useHighlighter } from "@/hooks/useHighlighter";
+import { HighlightedLine } from "./HighlightedLine";
 import {
   Collapsible,
   CollapsibleContent,
@@ -15,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import type { DetailsResult, SummaryChangeItem, FileSnippet } from "../types";
 import { DiffModal } from "./DiffModal";
+import { DefinitionPopover } from "./DefinitionPopover";
 
 interface Props {
   result: DetailsResult | null;
@@ -156,8 +159,8 @@ function TopLevelList({
 }
 
 /** Inline snippet renderer — just the diff lines, no modal chrome */
-function SnippetBlock({ snippet }: { snippet: string }) {
-  const lines = snippet.split("\n").filter((line) =>
+function SnippetBlock({ snippet, filePath, onTokenClick }: { snippet: string; filePath: string; onTokenClick?: (symbol: string, position: { x: number; y: number }) => void }) {
+  const lines = useMemo(() => snippet.split("\n").filter((line) =>
     !line.startsWith("diff --git ") &&
     !line.startsWith("index ") &&
     !line.startsWith("new file ") &&
@@ -165,19 +168,36 @@ function SnippetBlock({ snippet }: { snippet: string }) {
     !line.startsWith("--- ") &&
     !line.startsWith("+++ ") &&
     !line.startsWith("@@ ")
-  );
+  ), [snippet]);
+
+  const codeLines = useMemo(() => lines.map((l) =>
+    l.startsWith("+") || l.startsWith("-") || l.startsWith(" ") ? l.slice(1) : l
+  ), [lines]);
+
+  const tokens = useHighlighter(codeLines, filePath);
+
+  function bgFor(line: string): string {
+    if (line.startsWith("+")) return "bg-green-500/8";
+    if (line.startsWith("-")) return "bg-red-400/8";
+    return "";
+  }
 
   function classFor(line: string): string {
     if (line.startsWith("+")) return "text-green-500 bg-green-500/8";
     if (line.startsWith("-")) return "text-red-400 bg-red-400/8";
-    if (line.startsWith("@@")) return "text-primary";
     return "";
   }
 
   return (
     <pre className="m-0 font-mono text-xs leading-relaxed text-muted-foreground whitespace-pre tab-[4]">
       {lines.map((line, i) => (
-        <div key={i} className={`min-h-[1em] ${classFor(line)}`}>{line || "\n"}</div>
+        <div key={i} className={`min-h-[1em] ${tokens ? bgFor(line) : classFor(line)}`}>
+          {tokens ? (
+            <HighlightedLine tokens={tokens[i] ?? null} plainText={codeLines[i] || "\n"} onTokenClick={onTokenClick} />
+          ) : (
+            line || "\n"
+          )}
+        </div>
       ))}
     </pre>
   );
@@ -192,6 +212,7 @@ function SnippetModal({ title, files, repoPath, onClose }: {
 }) {
   const [fileDiff, setFileDiff] = useState<string | null>(null);
   const [fileDiffPath, setFileDiffPath] = useState("");
+  const [defPopover, setDefPopover] = useState<{ symbol: string; filePath: string; position: { x: number; y: number } } | null>(null);
 
   const grouped = groupSnippetsByFile(files);
 
@@ -204,6 +225,14 @@ function SnippetModal({ title, files, repoPath, onClose }: {
     } catch (e) {
       console.error("Failed to get file diff:", e);
     }
+  }
+
+  function handleTokenClick(filePath: string) {
+    return (symbol: string, position: { x: number; y: number }) => {
+      if (repoPath) {
+        setDefPopover({ symbol, filePath, position });
+      }
+    };
   }
 
   return (
@@ -231,7 +260,7 @@ function SnippetModal({ title, files, repoPath, onClose }: {
                 </button>
                 {snippets.map((snippet, j) => (
                   <div key={j} className={j < snippets.length - 1 ? "border-b border-border/50" : ""}>
-                    <SnippetBlock snippet={snippet} />
+                    <SnippetBlock snippet={snippet} filePath={file} onTokenClick={repoPath ? handleTokenClick(file) : undefined} />
                   </div>
                 ))}
               </div>
@@ -240,7 +269,16 @@ function SnippetModal({ title, files, repoPath, onClose }: {
         </DialogContent>
       </Dialog>
       {fileDiff !== null && (
-        <DiffModal diff={fileDiff} title={fileDiffPath} onClose={() => { setFileDiff(null); setFileDiffPath(""); }} />
+        <DiffModal diff={fileDiff} title={fileDiffPath} onClose={() => { setFileDiff(null); setFileDiffPath(""); }} repoPath={repoPath} />
+      )}
+      {defPopover && repoPath && (
+        <DefinitionPopover
+          symbol={defPopover.symbol}
+          filePath={defPopover.filePath}
+          repoPath={repoPath}
+          position={defPopover.position}
+          onClose={() => setDefPopover(null)}
+        />
       )}
     </>
   );

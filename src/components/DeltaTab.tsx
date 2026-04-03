@@ -102,7 +102,7 @@ export function DeltaTab({ result, loading, repoPath }: Props) {
         </TableFooter>
       </Table>
       {modalDiff !== null && (
-        <DiffModal diff={modalDiff} title={modalFile} onClose={closeModal} />
+        <DiffModal diff={modalDiff} title={modalFile} onClose={closeModal} repoPath={repoPath} />
       )}
     </div>
   );

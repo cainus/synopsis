@@ -56,4 +56,12 @@ export interface DiagramsResult {
   after_caption: string;
 }
 
+export interface DefinitionResult {
+  file: string;
+  line_number: number;
+  line_content: string;
+  context_before: string[];
+  context_after: string[];
+}
+
 export type TabName = "summary" | "details" | "delta" | "tests" | "diagrams";

@@ -43,7 +43,7 @@ Every item at every level is **collapsible** if it has children:
 Each item may include a **files** array containing one or more `{file, snippet}` pairs:
 
 - `file`: file path from the diff.
-- `snippet`: relevant diff lines (3–15 lines with `@@` hunk header).
+- `snippet`: relevant diff lines (10–30 lines with `@@` hunk header).
 - A single change item can reference **multiple files** when the change spans several files.
 - A file may appear multiple times (one entry per relevant hunk).
 - Organizational nodes use an empty `files: []` array.
@@ -58,15 +58,17 @@ Items with files show a **code icon button** (`</>`) inline after the title. Cli
 - When a file has multiple relevant hunks, include multiple entries with the same file path
 - Lines copied verbatim from the diff
 
-## How it works (backend)
+## How it works (backend) — two-phase approach
 
 1. `get_details(repo_path)` is called via Tauri `invoke`.
 2. Run `git diff <default-branch>` (two-dot diff).
 3. If empty → return empty product/technical arrays.
-4. Pipe diff into `claude -p` requesting JSON with `product_changes` and `technical_changes`.
-5. Parse and return a `DetailsResult`.
+4. **Phase 1 — Structure**: Pipe full diff into `claude -p` requesting the hierarchical tree with file paths but **no snippets**. This keeps the response small and focused on categorization.
+5. Parse the tree and collect all nodes that reference files.
+6. **Phase 2 — Snippets**: For each node with files, run a parallel `claude -p` call with only the per-file diff(s) (`git diff <branch> -- <file>`), asking Claude to extract 10–30 lines of the most behaviorally meaningful code.
+7. Stitch snippet results back into the tree and return the complete `DetailsResult`.
 
-This is a **separate Claude call** from the Summary tab, with its own prompt focused on detailed hierarchical analysis.
+Phase 2 calls run in parallel (max 5 concurrent via semaphore). If any snippet call fails, the node keeps empty files — the frontend handles this gracefully.
 
 ## Data shape
 

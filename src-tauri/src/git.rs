@@ -1,6 +1,9 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 use tauri::Emitter;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct FileStat {
@@ -273,7 +276,9 @@ pub async fn get_details(repo_path: String) -> Result<DetailsResult, String> {
         });
     }
 
-    let prompt = r#"Analyze these code changes and produce a detailed breakdown.
+    // --- Phase 1: Get the tree structure (titles + file paths, no snippets) ---
+
+    let structure_prompt = r#"Analyze these code changes and produce a detailed breakdown.
 
 Respond with ONLY a JSON object with these fields:
 - "product_changes": array (max 4) of user-facing/product changes. Empty array if none.
@@ -281,9 +286,7 @@ Respond with ONLY a JSON object with these fields:
 
 Each item has shape: {"title": "...", "children": [...], "files": [...]}
 The tree is recursive — children have the same shape. Leaf nodes use "children": [].
-"files" is an array of {"file": "...", "snippet": "..."} objects.
-"file" is the file path from the diff (e.g. "src/App.tsx").
-"snippet" is the relevant few lines copied verbatim from the diff input.
+"files" is an array of {"file": "..."} objects — just file paths, NO snippets.
 Use "files": [] for organizational nodes that don't reference specific files.
 A single change item may reference multiple files when the change spans several files.
 
@@ -293,27 +296,17 @@ CRITICAL depth rules:
 - Level-3 children: supporting specifics where helpful. Optional, 1-2 per parent.
 - No deeper than level 3.
 
-CRITICAL snippet rules:
+CRITICAL file reference rules:
 - Attach files at the most specific level — prefer leaf/detail nodes over top-level groupings
-- Every node that describes a concrete code change MUST have at least one entry in files
-- When a single change spans multiple files, include all relevant files in the files array
-- When a file has multiple relevant hunks, include multiple entries with the same file path
-- Snippets MUST be very short: 2-6 lines max. Just the single most important hunk header + the key changed lines.
-- Copy lines verbatim from the diff — do not edit or summarize them
+- Every node that describes a concrete code change MUST have at least one file entry
+- When a single change spans multiple files, include all relevant files
 - Nodes that are purely organizational groupings use "files": []
-
-CRITICAL size rules — the total JSON response MUST be under 12000 characters:
-- Use short file paths as-is from the diff, do not add extra context
-- Keep snippets to the absolute minimum lines needed (2-6 lines)
-- Prefer fewer, more important snippets over many small ones
-- If the diff is very large, focus on the most significant changes only
-- Maximum 3 files per item. Pick the most representative files if there are more.
 
 Example:
 {"product_changes": [], "technical_changes": [
   {"title": "Auth now uses JWT instead of sessions", "files": [], "children": [
-    {"title": "The express-session middleware was removed and replaced with jwtAuth", "files": [{"file": "src/middleware/auth.ts", "snippet": "@@ -15,8 +15,10 @@\n-const session = require('express-session');\n+const { jwtAuth } = require('./jwtAuth');"}], "children": []},
-    {"title": "Session store dependency removed", "files": [{"file": "package.json", "snippet": "@@ -12,3 +12,2 @@\n-    \"connect-redis\": \"^6.1.0\","}], "children": []}
+    {"title": "The express-session middleware was removed and replaced with jwtAuth", "files": [{"file": "src/middleware/auth.ts"}], "children": []},
+    {"title": "Session store dependency removed", "files": [{"file": "package.json"}], "children": []}
   ]}
 ]}
 
@@ -321,11 +314,116 @@ Rules:
 - Maximum 4 top-level items per section
 - Level-2 children are mandatory and must be descriptive (not terse labels)
 - No markdown in values — plain text only
-- No explanation outside the JSON
-- Snippets must be valid diff lines copied from the input
-- Keep total output under 12000 characters"#;
+- No explanation outside the JSON"#;
 
-    let mut child = Command::new("claude")
+    let response = run_claude_prompt_async(structure_prompt, diff_output.stdout.clone()).await?;
+    let json_str = extract_json_object(&response);
+
+    let mut parsed: DetailsResult = serde_json::from_str(&json_str).map_err(|e| {
+        format!("Failed to parse Claude response: {}\nRaw: {}", e, response)
+    })?;
+
+    // --- Phase 2: Fetch snippets in parallel for each node with files ---
+
+    let mut file_nodes = Vec::new();
+    collect_file_nodes(&parsed.product_changes, &mut file_nodes, "product", &[]);
+    collect_file_nodes(&parsed.technical_changes, &mut file_nodes, "technical", &[]);
+
+    if !file_nodes.is_empty() {
+        let semaphore = Arc::new(Semaphore::new(5));
+        let mut join_set = JoinSet::new();
+
+        for node in file_nodes {
+            let sem = semaphore.clone();
+            let repo = repo_path.clone();
+            let branch_name = branch.clone();
+            let title = node.title.clone();
+            let files = node.file_paths.clone();
+            let path = node.tree_path.clone();
+            let section = node.section.to_string();
+
+            join_set.spawn(async move {
+                let _permit = sem.acquire().await.unwrap();
+
+                // Get per-file diffs
+                let mut combined_diff = Vec::new();
+                for file in &files {
+                    let output = tokio::process::Command::new("git")
+                        .args(["-C", &repo, "diff", &branch_name, "--", file])
+                        .output()
+                        .await;
+                    if let Ok(o) = output {
+                        if !o.stdout.is_empty() {
+                            combined_diff.extend_from_slice(&o.stdout);
+                            combined_diff.push(b'\n');
+                        }
+                    }
+                }
+
+                if combined_diff.is_empty() {
+                    return (section, path, Vec::new());
+                }
+
+                let snippet_prompt = format!(
+                    r#"Given this diff, extract the most relevant code snippets that illustrate this change: "{title}"
+
+Respond with ONLY a JSON object: {{"file_snippets": [{{"file": "...", "snippet": "..."}}]}}
+
+Rules:
+- Each snippet should be 10-30 lines of verbatim diff content (including +/- prefixes)
+- Include @@ hunk headers for context
+- Focus on the most behaviorally meaningful code: logic changes, new functions, API changes, state management
+- Do NOT include imports, type declarations, or boilerplate unless they ARE the change
+- Return 1-3 snippets total, picking the most important parts
+- "file" must be the exact file path from the diff
+- Copy lines exactly from the diff — do not edit or summarize"#,
+                    title = title
+                );
+
+                let result = run_claude_prompt_async(&snippet_prompt, combined_diff).await;
+                let snippets = match result {
+                    Ok(resp) => {
+                        let json = extract_json_object(&resp);
+                        #[derive(serde::Deserialize)]
+                        struct SnippetResponse {
+                            #[serde(default)]
+                            file_snippets: Vec<FileSnippet>,
+                        }
+                        serde_json::from_str::<SnippetResponse>(&json)
+                            .map(|r| r.file_snippets)
+                            .unwrap_or_default()
+                    }
+                    Err(_) => Vec::new(),
+                };
+
+                (section, path, snippets)
+            });
+        }
+
+        // Collect results and stitch back into the tree
+        while let Some(result) = join_set.join_next().await {
+            if let Ok((section, path, snippets)) = result {
+                if snippets.is_empty() {
+                    continue;
+                }
+                let tree = if section == "product" {
+                    &mut parsed.product_changes
+                } else {
+                    &mut parsed.technical_changes
+                };
+                set_node_files(tree, &path, snippets);
+            }
+        }
+    }
+
+    Ok(parsed)
+}
+
+/// Run a Claude CLI prompt asynchronously, piping stdin_data as input.
+async fn run_claude_prompt_async(prompt: &str, stdin_data: Vec<u8>) -> Result<String, String> {
+    use tokio::io::AsyncWriteExt;
+
+    let mut child = tokio::process::Command::new("claude")
         .args(["-p", prompt])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -334,21 +432,66 @@ Rules:
         .map_err(|e| format!("Failed to start claude: {}", e))?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(&diff_output.stdout);
+        let _ = stdin.write_all(&stdin_data).await;
     }
 
     let output = child
         .wait_with_output()
+        .await
         .map_err(|e| format!("Failed to wait for claude: {}", e))?;
 
-    let response = String::from_utf8_lossy(&output.stdout).to_string();
-    let json_str = extract_json_object(&response);
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
 
-    let parsed: DetailsResult = serde_json::from_str(&json_str).map_err(|e| {
-        format!("Failed to parse Claude response: {}\nRaw: {}", e, response)
-    })?;
+/// Info about a node in the tree that has file references needing snippets.
+struct FileNode {
+    section: &'static str,    // "product" or "technical"
+    tree_path: Vec<usize>,    // index path into the tree
+    title: String,
+    file_paths: Vec<String>,
+}
 
-    Ok(parsed)
+/// Walk the tree and collect all nodes that have non-empty files.
+fn collect_file_nodes(
+    items: &[SummaryChangeItem],
+    out: &mut Vec<FileNode>,
+    section: &'static str,
+    parent_path: &[usize],
+) {
+    for (i, item) in items.iter().enumerate() {
+        let mut path = parent_path.to_vec();
+        path.push(i);
+
+        let file_paths: Vec<String> = item.files.iter()
+            .filter(|f| !f.file.is_empty())
+            .map(|f| f.file.clone())
+            .collect();
+
+        if !file_paths.is_empty() {
+            out.push(FileNode {
+                section,
+                tree_path: path.clone(),
+                title: item.title.clone(),
+                file_paths,
+            });
+        }
+
+        collect_file_nodes(&item.children, out, section, &path);
+    }
+}
+
+/// Navigate the tree by index path and replace the node's files.
+fn set_node_files(tree: &mut Vec<SummaryChangeItem>, path: &[usize], files: Vec<FileSnippet>) {
+    if path.is_empty() {
+        return;
+    }
+    if path.len() == 1 {
+        if let Some(node) = tree.get_mut(path[0]) {
+            node.files = files;
+        }
+    } else if let Some(node) = tree.get_mut(path[0]) {
+        set_node_files(&mut node.children, &path[1..], files);
+    }
 }
 
 #[tauri::command]
@@ -360,7 +503,197 @@ pub async fn get_file_diff(repo_path: String, file: String) -> Result<String, St
         .output()
         .map_err(|e| format!("Failed to run git diff: {}", e))?;
 
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    let diff = String::from_utf8_lossy(&output.stdout).to_string();
+
+    // If git diff returns nothing, the file may be untracked — show its full contents as added
+    if diff.trim().is_empty() {
+        let file_path = std::path::Path::new(&repo_path).join(&file);
+        if file_path.exists() {
+            let content = std::fs::read_to_string(&file_path)
+                .map_err(|e| format!("Failed to read file: {}", e))?;
+            let lines: Vec<String> = content.lines().map(|l| format!("+{}", l)).collect();
+            let header = format!("@@ -0,0 +1,{} @@", lines.len());
+            return Ok(format!("{}\n{}", header, lines.join("\n")));
+        }
+    }
+
+    Ok(diff)
+}
+
+#[derive(serde::Serialize, Clone)]
+pub struct DefinitionResult {
+    pub file: String,
+    pub line_number: u32,
+    pub line_content: String,
+    pub context_before: Vec<String>,
+    pub context_after: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn find_symbol_definition(
+    repo_path: String,
+    symbol: String,
+    language_hint: String,
+) -> Result<Vec<DefinitionResult>, String> {
+    // Build language-specific definition patterns
+    let patterns = build_definition_patterns(&symbol, &language_hint);
+    if patterns.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let file_extensions = extensions_for_language(&language_hint);
+
+    let mut all_results = Vec::new();
+    let glob_args: Vec<String> = file_extensions.iter().map(|ext| format!("*.{}", ext)).collect();
+    for pattern in &patterns {
+        let mut args = vec![
+            "-C".to_string(), repo_path.clone(),
+            "grep".to_string(), "-rn".to_string(), "-P".to_string(), pattern.clone(),
+            "--".to_string(),
+        ];
+        for g in &glob_args {
+            args.push(g.clone());
+        }
+
+        let output = Command::new("git")
+            .args(&args)
+            .output()
+            .ok();
+
+        if let Some(output) = output {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines().take(20) {
+                if let Some(result) = parse_grep_line(line, &repo_path) {
+                    if !is_test_file(&result.file) {
+                        all_results.push(result);
+                    }
+                }
+            }
+        }
+    }
+
+    // Deduplicate by file:line
+    all_results.sort_by(|a, b| (&a.file, a.line_number).cmp(&(&b.file, b.line_number)));
+    all_results.dedup_by(|a, b| a.file == b.file && a.line_number == b.line_number);
+    all_results.truncate(10);
+
+    // Read context for each result
+    for result in &mut all_results {
+        if let Ok((before, after)) = read_context(&repo_path, &result.file, result.line_number) {
+            result.context_before = before;
+            result.context_after = after;
+        }
+    }
+
+    Ok(all_results)
+}
+
+fn escape_regex(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() * 2);
+    for c in s.chars() {
+        if "\\^$.|?*+()[]{}".contains(c) {
+            result.push('\\');
+        }
+        result.push(c);
+    }
+    result
+}
+
+fn build_definition_patterns(symbol: &str, language: &str) -> Vec<String> {
+    let s = escape_regex(symbol);
+    // Use a single broad pattern that catches definitions across languages.
+    // The -P flag (PCRE) is used for \s and \b support.
+    match language {
+        "typescript" | "tsx" | "javascript" | "jsx" => vec![
+            format!(r"(function|const|let|var|class|interface|type|enum)\s+{}\b", s),
+        ],
+        "rust" => vec![
+            format!(r"(pub\s+)?(fn|struct|enum|trait|type|const|static|mod)\s+{}\b", s),
+        ],
+        "python" => vec![
+            format!(r"(def|class)\s+{}\b", s),
+        ],
+        "go" => vec![
+            format!(r"(func|type|var)\s+.*?{}\b", s),
+        ],
+        "swift" => vec![
+            format!(r"(func|class|struct|enum|protocol|let|var)\s+{}\b", s),
+        ],
+        "kotlin" | "java" => vec![
+            format!(r"(fun|class|interface|val|var|object)\s+{}\b", s),
+        ],
+        _ => vec![
+            format!(r"(function|def|fn|func|class|struct|interface|type|const|let|var|val|enum)\s+{}\b", s),
+        ],
+    }
+}
+
+fn extensions_for_language(language: &str) -> Vec<&'static str> {
+    match language {
+        "typescript" => vec!["ts", "tsx"],
+        "tsx" => vec!["ts", "tsx"],
+        "javascript" => vec!["js", "jsx", "mjs"],
+        "jsx" => vec!["js", "jsx"],
+        "rust" => vec!["rs"],
+        "python" => vec!["py"],
+        "go" => vec!["go"],
+        "swift" => vec!["swift"],
+        "kotlin" => vec!["kt", "kts"],
+        "java" => vec!["java"],
+        _ => vec!["ts", "tsx", "js", "jsx", "py", "rs", "go"],
+    }
+}
+
+fn parse_grep_line(line: &str, _repo_path: &str) -> Option<DefinitionResult> {
+    // Format: "file:line_number:content"
+    let first_colon = line.find(':')?;
+    let file = &line[..first_colon];
+    let rest = &line[first_colon + 1..];
+    let second_colon = rest.find(':')?;
+    let line_num: u32 = rest[..second_colon].parse().ok()?;
+    let content = rest[second_colon + 1..].trim().to_string();
+
+    Some(DefinitionResult {
+        file: file.to_string(),
+        line_number: line_num,
+        line_content: content,
+        context_before: vec![],
+        context_after: vec![],
+    })
+}
+
+fn read_context(repo_path: &str, file: &str, line_number: u32) -> Result<(Vec<String>, Vec<String>), String> {
+    let file_path = std::path::Path::new(repo_path).join(file);
+    let content = std::fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let all_lines: Vec<&str> = content.lines().collect();
+
+    let idx = (line_number as usize).saturating_sub(1); // 0-based
+    let start_before = idx.saturating_sub(5);
+    let end_after = (idx + 16).min(all_lines.len());
+
+    let before: Vec<String> = all_lines[start_before..idx].iter().map(|s| s.to_string()).collect();
+    let after: Vec<String> = all_lines[idx + 1..end_after].iter().map(|s| s.to_string()).collect();
+
+    Ok((before, after))
+}
+
+#[tauri::command]
+pub async fn read_file_range(
+    repo_path: String,
+    file: String,
+    start_line: u32,
+    end_line: u32,
+) -> Result<String, String> {
+    let file_path = std::path::Path::new(&repo_path).join(&file);
+    let content = std::fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let lines: Vec<&str> = content.lines().collect();
+
+    let start = (start_line as usize).saturating_sub(1);
+    let end = (end_line as usize).min(lines.len());
+
+    Ok(lines[start..end].join("\n"))
 }
 
 fn is_test_file(path: &str) -> bool {

@@ -11,6 +11,8 @@ pub fn run() {
             git::get_summary,
             git::get_details,
             git::get_file_diff,
+            git::find_symbol_definition,
+            git::read_file_range,
             git::get_tests_result,
             git::get_diagrams,
         ])
