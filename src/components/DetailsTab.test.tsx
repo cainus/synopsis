@@ -7,37 +7,33 @@ const mockResult: DetailsResult = {
   product_changes: [
     {
       title: "Users now stay logged in longer",
-      file: "",
-      snippet: "",
+      files: [],
       children: [
-        { title: "JWT refresh tokens extend sessions automatically", file: "src/auth.ts", snippet: "@@ -10,3 +10,5 @@\n+const refreshToken = jwt.sign(payload, secret);", children: [] },
-        { title: "No more forced re-login after 30 minutes", file: "", snippet: "", children: [] },
+        { title: "JWT refresh tokens extend sessions automatically", files: [{ file: "src/auth.ts", snippet: "@@ -10,3 +10,5 @@\n+const refreshToken = jwt.sign(payload, secret);" }], children: [] },
+        { title: "No more forced re-login after 30 minutes", files: [], children: [] },
       ],
     },
   ],
   technical_changes: [
     {
       title: "Replaced session middleware with JWT middleware",
-      file: "",
-      snippet: "",
+      files: [],
       children: [
-        { title: "Removed express-session dependency", file: "package.json", snippet: "@@ -12,3 +12,2 @@\n-    \"connect-redis\": \"^6.1.0\",", children: [] },
+        { title: "Removed express-session dependency", files: [{ file: "package.json", snippet: "@@ -12,3 +12,2 @@\n-    \"connect-redis\": \"^6.1.0\"," }], children: [] },
         {
           title: "New jwtAuth middleware validates tokens on each request",
-          file: "src/middleware/auth.ts",
-          snippet: "@@ -1,5 +1,8 @@\n-const session = require('express-session');\n+const { verify } = require('jsonwebtoken');",
+          files: [{ file: "src/middleware/auth.ts", snippet: "@@ -1,5 +1,8 @@\n-const session = require('express-session');\n+const { verify } = require('jsonwebtoken');" }],
           children: [
-            { title: "Checks token expiry and signature", file: "src/middleware/auth.ts", snippet: "+  if (decoded.exp < Date.now()) throw new Error('expired');", children: [] },
+            { title: "Checks token expiry and signature", files: [{ file: "src/middleware/auth.ts", snippet: "+  if (decoded.exp < Date.now()) throw new Error('expired');" }], children: [] },
           ],
         },
       ],
     },
     {
       title: "Added token refresh endpoint",
-      file: "src/routes/auth.ts",
-      snippet: "@@ -0,0 +1,10 @@\n+router.post('/refresh', ...)",
+      files: [{ file: "src/routes/auth.ts", snippet: "@@ -0,0 +1,10 @@\n+router.post('/refresh', ...)" }],
       children: [
-        { title: "POST /auth/refresh returns new access token", file: "src/routes/auth.ts", snippet: "+router.post('/refresh', ...)", children: [] },
+        { title: "POST /auth/refresh returns new access token", files: [{ file: "src/routes/auth.ts", snippet: "+router.post('/refresh', ...)" }], children: [] },
       ],
     },
   ],
@@ -47,6 +43,7 @@ const defaultProps = {
   loading: false,
   hasRepo: true,
   onGenerate: vi.fn(),
+  repoPath: "/test/repo",
 };
 
 function getCollapsibleFor(buttonText: string) {
@@ -60,20 +57,14 @@ describe("DetailsTab", () => {
     expect(screen.getByText(/pick a repo folder/i)).toBeInTheDocument();
   });
 
-  it("shows generate button when not yet fetched", () => {
-    render(<DetailsTab result={null} {...defaultProps} />);
-    expect(screen.getByRole("button", { name: /generate details/i })).toBeInTheDocument();
-  });
-
-  it("calls onGenerate when the button is clicked", async () => {
+  it("auto-generates when repo is picked but no result yet", () => {
     const onGenerate = vi.fn();
     render(<DetailsTab result={null} {...defaultProps} onGenerate={onGenerate} />);
-    await userEvent.click(screen.getByRole("button", { name: /generate details/i }));
     expect(onGenerate).toHaveBeenCalledOnce();
   });
 
-  it("shows spinner while loading", () => {
-    render(<DetailsTab result={null} {...defaultProps} loading={true} />);
+  it("shows spinner when no result yet", () => {
+    render(<DetailsTab result={null} {...defaultProps} />);
     expect(screen.getByText(/thinking/i)).toBeInTheDocument();
   });
 
@@ -121,18 +112,49 @@ describe("DetailsTab", () => {
     expect(nestedCollapsible).toHaveAttribute("data-open", "");
   });
 
-  it("renders snippet links for items with a file", () => {
+  it("shows code icon button for items with files", () => {
     render(<DetailsTab result={mockResult} {...defaultProps} />);
-    const fileLinks = screen.getAllByText("auth.ts");
-    expect(fileLinks.length).toBeGreaterThan(0);
-    expect(fileLinks[0].className).toContain("font-mono");
+    const codeButtons = screen.getAllByTitle("View code changes");
+    expect(codeButtons.length).toBeGreaterThan(0);
   });
 
-  it("opens diff modal when snippet link is clicked", async () => {
+  it("does not show code icon for items without files", () => {
     render(<DetailsTab result={mockResult} {...defaultProps} />);
-    const authLink = screen.getAllByText("auth.ts")[0];
-    await userEvent.click(authLink);
+    // "Users now stay logged in longer" has files: [] — should not have a code button
+    const title = screen.getByText("Users now stay logged in longer");
+    const listItem = title.closest("li")!;
+    expect(listItem.querySelector('[title="View code changes"]')).toBeNull();
+  });
+
+  it("opens diff modal with all file snippets when code button is clicked", async () => {
+    render(<DetailsTab result={mockResult} {...defaultProps} />);
+    // "Added token refresh endpoint" has files directly
+    const codeButtons = screen.getAllByTitle("View code changes");
+    await userEvent.click(codeButtons[codeButtons.length - 1]);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("modal shows grouped snippets from multiple files", async () => {
+    const multiFileResult: DetailsResult = {
+      product_changes: [],
+      technical_changes: [
+        {
+          title: "Refactored auth across multiple files",
+          files: [
+            { file: "src/auth.ts", snippet: "@@ -1,3 +1,5 @@\n+export const auth = () => {};" },
+            { file: "src/middleware.ts", snippet: "@@ -1,2 +1,3 @@\n+export const middleware = () => {};" },
+          ],
+          children: [],
+        },
+      ],
+    };
+    render(<DetailsTab result={multiFileResult} {...defaultProps} />);
+    await userEvent.click(screen.getByText("Refactored auth across multiple files"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // Both file snippets should appear in the combined output
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("export const auth");
+    expect(dialog.textContent).toContain("export const middleware");
   });
 
   it("hides section when there are no items", () => {

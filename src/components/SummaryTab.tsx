@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { useEffect } from "react";
 import type { SummaryResult } from "../types";
 
 interface Props {
@@ -9,17 +9,13 @@ interface Props {
 }
 
 export function SummaryTab({ result, loading, hasRepo, onGenerate }: Props) {
+  useEffect(() => {
+    if (hasRepo && !loading && !result) onGenerate();
+  }, [hasRepo, loading, result, onGenerate]);
+
   if (!hasRepo) return <div className="text-muted-foreground/60 py-8 text-center">Pick a repo folder to generate a summary.</div>;
 
-  if (!loading && !result) {
-    return (
-      <div className="flex justify-center py-12">
-        <Button onClick={onGenerate}>Generate Summary</Button>
-      </div>
-    );
-  }
-
-  if (loading) {
+  if (!result) {
     return (
       <div className="flex items-center justify-center gap-2.5 text-muted-foreground py-12 text-sm">
         <span className="inline-block w-3.5 h-3.5 border-2 border-muted border-t-primary rounded-full animate-spin shrink-0" />
@@ -27,8 +23,6 @@ export function SummaryTab({ result, loading, hasRepo, onGenerate }: Props) {
       </div>
     );
   }
-
-  if (!result) return null;
 
   return (
     <div className="max-w-[780px]">

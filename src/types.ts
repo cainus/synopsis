@@ -23,11 +23,15 @@ export interface TestsResult {
   test_cases: TestCase[];
 }
 
+export interface FileSnippet {
+  file: string;
+  snippet: string;
+}
+
 export interface SummaryChangeItem {
   title: string;
   children: SummaryChangeItem[];
-  file: string;
-  snippet: string;
+  files: FileSnippet[];
 }
 
 export interface SummaryBullet {

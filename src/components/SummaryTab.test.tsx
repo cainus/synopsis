@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { SummaryTab } from "./SummaryTab";
 import type { SummaryResult } from "../types";
 
@@ -24,20 +23,14 @@ describe("SummaryTab", () => {
     expect(screen.getByText(/pick a repo folder/i)).toBeInTheDocument();
   });
 
-  it("shows generate button when repo is picked but summary not started", () => {
-    render(<SummaryTab result={null} {...defaultProps} />);
-    expect(screen.getByRole("button", { name: /generate summary/i })).toBeInTheDocument();
-  });
-
-  it("calls onGenerate when the button is clicked", async () => {
+  it("auto-generates when repo is picked but no result yet", () => {
     const onGenerate = vi.fn();
     render(<SummaryTab result={null} {...defaultProps} onGenerate={onGenerate} />);
-    await userEvent.click(screen.getByRole("button", { name: /generate summary/i }));
     expect(onGenerate).toHaveBeenCalledOnce();
   });
 
-  it("shows spinner while loading", () => {
-    render(<SummaryTab result={null} {...defaultProps} loading={true} />);
+  it("shows spinner when no result yet", () => {
+    render(<SummaryTab result={null} {...defaultProps} />);
     expect(screen.getByText(/thinking/i)).toBeInTheDocument();
   });
 
@@ -58,7 +51,6 @@ describe("SummaryTab", () => {
     const empty: SummaryResult = { headline: "No changes", bullets: [] };
     render(<SummaryTab result={empty} {...defaultProps} />);
     expect(screen.getByText("No changes")).toBeInTheDocument();
-    // No bullet list rendered when bullets array is empty
     expect(document.querySelector("ul")).not.toBeInTheDocument();
   });
 });

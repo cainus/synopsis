@@ -40,17 +40,22 @@ Every item at every level is **collapsible** if it has children:
 
 ## Code snippet links
 
-Each item may include a **file** and **snippet**:
+Each item may include a **files** array containing one or more `{file, snippet}` pairs:
 
-- `file`: file path from the diff. Empty for organizational nodes.
-- `snippet`: relevant diff lines (3–15 lines with `@@` hunk header). Empty for organizational nodes.
+- `file`: file path from the diff.
+- `snippet`: relevant diff lines (3–15 lines with `@@` hunk header).
+- A single change item can reference **multiple files** when the change spans several files.
+- A file may appear multiple times (one entry per relevant hunk).
+- Organizational nodes use an empty `files: []` array.
 
-A file link is rendered inline after the title (blue monospace filename). Clicking opens the shared **DiffModal** with the snippet — no backend call needed.
+Items with files show a **code icon button** (`</>`) inline after the title. Clicking opens the shared **DiffModal** with **all** file snippets for that item, grouped by file path with `diff --git` headers between sections. No backend call needed.
 
 ### Snippet rules (enforced by prompt)
 
 - Attached at the most specific (leaf) level
-- Concrete change nodes must have file + snippet
+- Concrete change nodes must have at least one entry in files
+- When a change spans multiple files, all relevant files are included
+- When a file has multiple relevant hunks, include multiple entries with the same file path
 - Lines copied verbatim from the diff
 
 ## How it works (backend)
@@ -66,11 +71,15 @@ This is a **separate Claude call** from the Summary tab, with its own prompt foc
 ## Data shape
 
 ```rust
+pub struct FileSnippet {
+    pub file: String,
+    pub snippet: String,
+}
+
 pub struct SummaryChangeItem {
     pub title: String,
     pub children: Vec<SummaryChangeItem>,  // recursive
-    pub file: String,
-    pub snippet: String,
+    pub files: Vec<FileSnippet>,
 }
 
 pub struct DetailsResult {
@@ -80,11 +89,15 @@ pub struct DetailsResult {
 ```
 
 ```ts
+interface FileSnippet {
+  file: string;
+  snippet: string;
+}
+
 interface SummaryChangeItem {
   title: string;
   children: SummaryChangeItem[];
-  file: string;
-  snippet: string;
+  files: FileSnippet[];
 }
 
 interface DetailsResult {

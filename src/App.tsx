@@ -74,7 +74,7 @@ function App() {
           <SummaryTab result={summaryResult} loading={loading.summary} hasRepo={!!repoPath} onGenerate={fetchSummary} />
         </TabsContent>
         <TabsContent value="details" className="flex-1 overflow-auto p-4 mt-0">
-          <DetailsTab result={detailsResult} loading={loading.details} hasRepo={!!repoPath} onGenerate={fetchDetails} />
+          <DetailsTab result={detailsResult} loading={loading.details} hasRepo={!!repoPath} onGenerate={fetchDetails} repoPath={repoPath} />
         </TabsContent>
         <TabsContent value="delta" className="flex-1 overflow-auto p-4 mt-0">
           <DeltaTab result={deltaResult} loading={loading.delta} repoPath={repoPath} />

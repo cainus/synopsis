@@ -32,14 +32,20 @@ pub struct TestsResult {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct FileSnippet {
+    #[serde(default)]
+    pub file: String,
+    #[serde(default)]
+    pub snippet: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SummaryChangeItem {
     pub title: String,
     #[serde(default)]
     pub children: Vec<SummaryChangeItem>,
     #[serde(default)]
-    pub file: String,
-    #[serde(default)]
-    pub snippet: String,
+    pub files: Vec<FileSnippet>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -273,29 +279,41 @@ Respond with ONLY a JSON object with these fields:
 - "product_changes": array (max 4) of user-facing/product changes. Empty array if none.
 - "technical_changes": array (max 4) of technical/architectural changes.
 
-Each item has shape: {"title": "...", "children": [...], "file": "...", "snippet": "..."}
+Each item has shape: {"title": "...", "children": [...], "files": [...]}
 The tree is recursive — children have the same shape. Leaf nodes use "children": [].
-"file" is the file path from the diff (e.g. "src/App.tsx"). Use "" if not applicable.
-"snippet" is the relevant few lines copied verbatim from the diff input — only the specific lines that relate to this item, not the whole file diff. Use "" if not applicable.
+"files" is an array of {"file": "...", "snippet": "..."} objects.
+"file" is the file path from the diff (e.g. "src/App.tsx").
+"snippet" is the relevant few lines copied verbatim from the diff input.
+Use "files": [] for organizational nodes that don't reference specific files.
+A single change item may reference multiple files when the change spans several files.
 
 CRITICAL depth rules:
 - Top-level titles: short scannable label (under 12 words), these are clickable headings
-- Level-2 children: descriptive sentences that explain the change in detail (20-40 words each). These are the main content — be thorough and informative here. Every top-level item MUST have 2-4 children at this level.
-- Level-3 children: supporting specifics where helpful (file names, API details, edge cases). Optional but encouraged when there is complexity to break down. Use 1-3 per parent.
-- You may go to level 4 if needed but no deeper.
+- Level-2 children: descriptive sentences that explain the change in detail (20-40 words each). Every top-level item MUST have 2-4 children at this level.
+- Level-3 children: supporting specifics where helpful. Optional, 1-2 per parent.
+- No deeper than level 3.
 
 CRITICAL snippet rules:
-- Attach file + snippet at the most specific level — prefer leaf/detail nodes over top-level groupings
-- Every node that describes a concrete code change MUST have a file and snippet
-- Snippets should be SHORT: just the key lines (typically 3-15 lines). Include the @@ hunk header for context.
+- Attach files at the most specific level — prefer leaf/detail nodes over top-level groupings
+- Every node that describes a concrete code change MUST have at least one entry in files
+- When a single change spans multiple files, include all relevant files in the files array
+- When a file has multiple relevant hunks, include multiple entries with the same file path
+- Snippets MUST be very short: 2-6 lines max. Just the single most important hunk header + the key changed lines.
 - Copy lines verbatim from the diff — do not edit or summarize them
-- Nodes that are purely organizational groupings use "file": "" and "snippet": ""
+- Nodes that are purely organizational groupings use "files": []
+
+CRITICAL size rules — the total JSON response MUST be under 12000 characters:
+- Use short file paths as-is from the diff, do not add extra context
+- Keep snippets to the absolute minimum lines needed (2-6 lines)
+- Prefer fewer, more important snippets over many small ones
+- If the diff is very large, focus on the most significant changes only
+- Maximum 3 files per item. Pick the most representative files if there are more.
 
 Example:
 {"product_changes": [], "technical_changes": [
-  {"title": "Auth now uses JWT instead of sessions", "file": "", "snippet": "", "children": [
-    {"title": "The express-session middleware was removed and replaced with jwtAuth", "file": "src/middleware/auth.ts", "snippet": "@@ -15,8 +15,10 @@\n-const session = require('express-session');\n+const { jwtAuth } = require('./jwtAuth');", "children": []},
-    {"title": "Session store dependency removed from package.json", "file": "package.json", "snippet": "@@ -12,3 +12,2 @@\n-    \"connect-redis\": \"^6.1.0\",", "children": []}
+  {"title": "Auth now uses JWT instead of sessions", "files": [], "children": [
+    {"title": "The express-session middleware was removed and replaced with jwtAuth", "files": [{"file": "src/middleware/auth.ts", "snippet": "@@ -15,8 +15,10 @@\n-const session = require('express-session');\n+const { jwtAuth } = require('./jwtAuth');"}], "children": []},
+    {"title": "Session store dependency removed", "files": [{"file": "package.json", "snippet": "@@ -12,3 +12,2 @@\n-    \"connect-redis\": \"^6.1.0\","}], "children": []}
   ]}
 ]}
 
@@ -304,7 +322,8 @@ Rules:
 - Level-2 children are mandatory and must be descriptive (not terse labels)
 - No markdown in values — plain text only
 - No explanation outside the JSON
-- Snippets must be valid diff lines copied from the input"#;
+- Snippets must be valid diff lines copied from the input
+- Keep total output under 12000 characters"#;
 
     let mut child = Command::new("claude")
         .args(["-p", prompt])
