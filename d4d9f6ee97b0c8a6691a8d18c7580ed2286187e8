@@ -1,0 +1,47 @@
+src/components/DefinitionView.tsx
+  7e460731a4a5c03b 1-75
+src/lib/highlight.ts
+  7e460731a4a5c03b 1-83
+src-tauri/src/git.rs
+  7e460731a4a5c03b 3,5-6,279,281,289,299,301-302,308-309,317,319-426,435,440,443-444,446-452,454-494,506-520,523-696
+src/components/HighlightedLine.tsx
+  7e460731a4a5c03b 1-57
+src/components/DiffModal.tsx
+  7e460731a4a5c03b 1,10-12,20,23-30,38-43,54-56,59-60,68,71-74,79,81,83,86,89,97-100,105,108-116,126,128-129,132-142,144-153,155-202,205-211,216-237,243,246,252,254,256,263,265-270,273-300,303-307,309-320
+spec/details-tab.md
+  7e460731a4a5c03b 46,61,66-69,71
+src/components/DeltaTab.tsx
+  7e460731a4a5c03b 105
+src-tauri/src/lib.rs
+  7e460731a4a5c03b 14-15
+src/components/DefinitionPopover.tsx
+  7e460731a4a5c03b 1-101
+Makefile
+  7e460731a4a5c03b 1-19
+src/types.ts
+  7e460731a4a5c03b 59-66
+src/hooks/useHighlighter.ts
+  7e460731a4a5c03b 1-29
+src/components/DetailsTab.tsx
+  7e460731a4a5c03b 1,5-6,20,162-163,171,173-183,194-200,215,230-237,263,272-281
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "d4d9f6ee97b0c8a6691a8d18c7580ed2286187e8",
+  "prompts": {
+    "7e460731a4a5c03b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb9e8642-6407-4f9e-824e-8dd91e203495",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Greggory Caines",
+      "messages": [],
+      "total_additions": 1065,
+      "total_deletions": 221,
+      "accepted_lines": 1005,
+      "overriden_lines": 0
+    }
+  }
+}
