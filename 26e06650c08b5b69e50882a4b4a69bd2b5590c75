@@ -1,0 +1,43 @@
+src-tauri/src/git/details.rs
+  a863d7608bdec08f 1-172
+src-tauri/src/git/summary.rs
+  a863d7608bdec08f 1-34
+src-tauri/src/git/mod.rs
+  a863d7608bdec08f 1-61
+src-tauri/src/git/types.rs
+  a863d7608bdec08f 1-71
+src-tauri/src/git/tests_cmd.rs
+  a863d7608bdec08f 1-196
+src-tauri/src/lib.rs
+  a863d7608bdec08f 14-17,20-21
+src-tauri/src/git/claude.rs
+  a863d7608bdec08f 1-24
+src-tauri/src/git/delta.rs
+  a863d7608bdec08f 1-285
+src-tauri/src/git/diagrams.rs
+  a863d7608bdec08f 1-52
+spec/architecture.md
+  a863d7608bdec08f 40-48,57
+CLAUDE.md
+  a863d7608bdec08f 24-31,64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "26e06650c08b5b69e50882a4b4a69bd2b5590c75",
+  "prompts": {
+    "a863d7608bdec08f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb2a002c-65d1-412d-8d4d-af0ceeee9f4f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Greggory Caines",
+      "messages": [],
+      "total_additions": 932,
+      "total_deletions": 22,
+      "accepted_lines": 920,
+      "overriden_lines": 0
+    }
+  }
+}
