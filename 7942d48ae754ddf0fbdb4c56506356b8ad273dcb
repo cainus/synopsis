@@ -1,0 +1,45 @@
+src/contexts/RepoContext.tsx
+  7e460731a4a5c03b 1-15
+src/App.tsx
+  7e460731a4a5c03b 10,46-51,53-57,59-73,75-92
+src-tauri/src/symbol_finder.rs
+  7e460731a4a5c03b 159-388
+src/components/HighlightedLine.test.tsx
+  7e460731a4a5c03b 1-93
+src/components/DiffModal.tsx
+  7e460731a4a5c03b 240,254-255,291-292,296
+src/components/SnippetBlock.tsx
+  7e460731a4a5c03b 1-40
+src/components/DeltaTab.tsx
+  7e460731a4a5c03b 15,28-29,105
+src/components/SnippetModal.tsx
+  7e460731a4a5c03b 1-102
+src/components/DeltaTab.test.tsx
+  7e460731a4a5c03b 3,15-18,21,26,31,42,47,53,60,67
+src/components/DetailsTab.test.tsx
+  7e460731a4a5c03b 4,49-51,60,66,71,76,84,96,109,120,126,134,155,166
+src/components/DefinitionPopover.tsx
+  7e460731a4a5c03b 8,17-18
+src/components/DetailsTab.tsx
+  7e460731a4a5c03b 1-2,9,150,185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "7942d48ae754ddf0fbdb4c56506356b8ad273dcb",
+  "prompts": {
+    "7e460731a4a5c03b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb9e8642-6407-4f9e-824e-8dd91e203495",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Greggory Caines",
+      "messages": [],
+      "total_additions": 583,
+      "total_deletions": 248,
+      "accepted_lines": 573,
+      "overriden_lines": 0
+    }
+  }
+}
