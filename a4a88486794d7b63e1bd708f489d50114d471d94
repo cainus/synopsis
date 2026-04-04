@@ -1,0 +1,51 @@
+src-tauri/src/json_utils.rs
+  7e460731a4a5c03b 1-50
+src/components/SummaryTab.tsx
+  7e460731a4a5c03b 3,21
+src/components/DetailsTab.tsx
+  7e460731a4a5c03b 21-22,181-182,306
+src/hooks/useRepo.ts
+  7e460731a4a5c03b 1,111-126,129-132
+src/components/DiffModal.tsx
+  7e460731a4a5c03b 13,24-25
+src/components/TestsTab.tsx
+  7e460731a4a5c03b 9,138
+src-tauri/src/git.rs
+  7e460731a4a5c03b 8-11,226,269,317,485,491,496,506,514,558-561,645
+src/components/ThinkingSpinner.tsx
+  7e460731a4a5c03b 1-8
+src-tauri/src/lib.rs
+  7e460731a4a5c03b 2-5,18-19
+src-tauri/src/symbol_finder.rs
+  7e460731a4a5c03b 1-175
+src-tauri/src/prompts.rs
+  7e460731a4a5c03b 1-118
+src/components/HighlightedLine.tsx
+  7e460731a4a5c03b 29,32,35-86,97-99,101
+src-tauri/src/test_parser.rs
+  7e460731a4a5c03b 1-626
+src/lib/diffStyles.ts
+  7e460731a4a5c03b 1-14
+src/components/DiagramsTab.tsx
+  7e460731a4a5c03b 4,59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "a4a88486794d7b63e1bd708f489d50114d471d94",
+  "prompts": {
+    "7e460731a4a5c03b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb9e8642-6407-4f9e-824e-8dd91e203495",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Greggory Caines",
+      "messages": [],
+      "total_additions": 1152,
+      "total_deletions": 1109,
+      "accepted_lines": 1109,
+      "overriden_lines": 0
+    }
+  }
+}
