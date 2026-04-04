@@ -1,0 +1,33 @@
+src/components/DiffModal.tsx
+  7e460731a4a5c03b 14,90,93,123,233,236
+src/components/SnippetBlock.tsx
+  7e460731a4a5c03b 5,24,30
+src-tauri/src/symbol_finder.rs
+  7e460731a4a5c03b 41-46
+Makefile
+  7e460731a4a5c03b 1,4,8-9
+CLAUDE.md
+  7e460731a4a5c03b 5,23-38,43,49-52,57-58,60-65,72-74
+src/lib/highlight.ts
+  7e460731a4a5c03b 36-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "e086bba6fa67d4a1c9429d633e64ed2b1e492382",
+  "prompts": {
+    "7e460731a4a5c03b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb9e8642-6407-4f9e-824e-8dd91e203495",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Greggory Caines",
+      "messages": [],
+      "total_additions": 63,
+      "total_deletions": 22,
+      "accepted_lines": 63,
+      "overriden_lines": 0
+    }
+  }
+}
