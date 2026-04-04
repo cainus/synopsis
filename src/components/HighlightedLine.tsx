@@ -26,10 +26,64 @@ const KEYWORDS = new Set([
   "go", "defer", "select", "range", "nil",
 ]);
 
-const IDENTIFIER_RE = /^[a-zA-Z_$]\w*$/;
+const IDENTIFIER_RE = /[a-zA-Z_$]\w*/g;
 
 function isClickableIdentifier(text: string): boolean {
-  return IDENTIFIER_RE.test(text) && !KEYWORDS.has(text);
+  return text.length > 1 && !KEYWORDS.has(text);
+}
+
+/** Split a token's content into parts, making identifiers clickable */
+function renderTokenParts(
+  content: string,
+  color: string | undefined,
+  onTokenClick: (symbol: string, position: { x: number; y: number }) => void,
+) {
+  const parts: { text: string; clickable: boolean }[] = [];
+  let lastIndex = 0;
+
+  // Reset regex state
+  IDENTIFIER_RE.lastIndex = 0;
+  let match;
+  while ((match = IDENTIFIER_RE.exec(content)) !== null) {
+    const ident = match[0];
+    const start = match.index;
+
+    // Add non-identifier prefix
+    if (start > lastIndex) {
+      parts.push({ text: content.slice(lastIndex, start), clickable: false });
+    }
+
+    parts.push({ text: ident, clickable: isClickableIdentifier(ident) });
+    lastIndex = start + ident.length;
+  }
+
+  // Add remaining non-identifier suffix
+  if (lastIndex < content.length) {
+    parts.push({ text: content.slice(lastIndex), clickable: false });
+  }
+
+  if (parts.length === 0) {
+    return <span style={{ color }}>{content}</span>;
+  }
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.clickable ? (
+          <span
+            key={i}
+            style={{ color }}
+            className="cursor-pointer hover:underline hover:decoration-dotted"
+            onClick={(e) => { e.stopPropagation(); onTokenClick(part.text, { x: e.clientX, y: e.clientY }); }}
+          >
+            {part.text}
+          </span>
+        ) : (
+          <span key={i} style={{ color }}>{part.text}</span>
+        )
+      )}
+    </>
+  );
 }
 
 export function HighlightedLine({ tokens, plainText, onTokenClick }: Props) {
@@ -40,14 +94,11 @@ export function HighlightedLine({ tokens, plainText, onTokenClick }: Props) {
   return (
     <>
       {tokens.map((token, i) => {
-        const clickable = onTokenClick && isClickableIdentifier(token.content);
+        if (onTokenClick) {
+          return <span key={i}>{renderTokenParts(token.content, token.color, onTokenClick)}</span>;
+        }
         return (
-          <span
-            key={i}
-            style={{ color: token.color }}
-            className={clickable ? "cursor-pointer hover:underline hover:decoration-dotted" : undefined}
-            onClick={clickable ? (e) => { e.stopPropagation(); onTokenClick(token.content, { x: e.clientX, y: e.clientY }); } : undefined}
-          >
+          <span key={i} style={{ color: token.color }}>
             {token.content}
           </span>
         );

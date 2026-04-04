@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import mermaid from "mermaid";
 import type { DiagramsResult } from "../types";
+import { ThinkingSpinner } from "./ThinkingSpinner";
 
 mermaid.initialize({ startOnLoad: false, theme: "dark" });
 
@@ -55,10 +56,7 @@ export function DiagramsTab({ result, loading, hasRepo, onGenerate }: Props) {
 
   if (!result) {
     return (
-      <div className="flex items-center justify-center gap-2.5 text-muted-foreground py-12 text-sm">
-        <span className="inline-block w-3.5 h-3.5 border-2 border-muted border-t-primary rounded-full animate-spin shrink-0" />
-        Thinking…
-      </div>
+      <ThinkingSpinner />
     );
   }
 

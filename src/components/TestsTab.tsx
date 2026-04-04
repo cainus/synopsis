@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/collapsible";
 import type { TestCase, TestsResult } from "../types";
 import { DiffModal } from "./DiffModal";
+import { ThinkingSpinner } from "./ThinkingSpinner";
 
 interface Props {
   result: TestsResult | null;
@@ -134,10 +135,7 @@ export function TestsTab({ result, loading, hasRepo }: Props) {
 
   if (!hasRepo) return <div className="text-muted-foreground/60 py-8 text-center">Pick a repo folder to analyse tests.</div>;
   if (loading) return (
-    <div className="flex items-center justify-center gap-2.5 text-muted-foreground py-12 text-sm">
-      <span className="inline-block w-3.5 h-3.5 border-2 border-muted border-t-primary rounded-full animate-spin shrink-0" />
-      Thinking…
-    </div>
+    <ThinkingSpinner />
   );
   if (!result) return null;
   if (result.test_cases.length === 0)

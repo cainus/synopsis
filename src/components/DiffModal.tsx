@@ -10,6 +10,7 @@ import { XIcon } from "lucide-react";
 import { useHighlighter } from "@/hooks/useHighlighter";
 import { HighlightedLine } from "./HighlightedLine";
 import { DefinitionPopover } from "./DefinitionPopover";
+import { diffBg, diffClass } from "@/lib/diffStyles";
 
 type ViewMode = "inline" | "side-by-side";
 
@@ -20,20 +21,8 @@ interface Props {
   repoPath?: string | null;
 }
 
-/** Background class for diff lines — no text color, just a tint */
-function bgFor(line: string): string {
-  if (line.startsWith("+")) return "bg-green-500/8";
-  if (line.startsWith("-")) return "bg-red-400/8";
-  return "";
-}
-
-/** Full class (text + bg) for non-highlighted fallback */
-function classFor(line: string): string {
-  if (line.startsWith("+")) return "text-green-500 bg-green-500/8";
-  if (line.startsWith("-")) return "text-red-400 bg-red-400/8";
-  if (line.startsWith("@@")) return "text-primary";
-  return "";
-}
+const bgFor = diffBg;
+const classFor = diffClass;
 
 /** Strip the +/- /space prefix from a diff line to get pure code */
 function stripPrefix(line: string): string {

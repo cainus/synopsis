@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { DeltaResult, DetailsResult, DiagramsResult, SummaryResult, TestsResult } from "../types";
 
@@ -108,48 +108,28 @@ export function useRepo(): RepoState {
     fetchSummary();
   }, [repoPath, refreshKey]);
 
-  function fetchSummary() {
-    if (!repoPath || summaryFetched.current) return;
-    summaryFetched.current = true;
-    setLoading((l) => ({ ...l, summary: true }));
-    invoke<SummaryResult>("get_summary", { repoPath })
-      .then((result) => {
-        setSummaryResult(result);
-        fetchDetails();
-      })
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading((l) => ({ ...l, summary: false })));
+  function makeFetcher<T>(
+    key: keyof Loading,
+    command: string,
+    setter: (result: T) => void,
+    fetched: React.MutableRefObject<boolean>,
+    after?: () => void,
+  ) {
+    return () => {
+      if (!repoPath || fetched.current) return;
+      fetched.current = true;
+      setLoading((l) => ({ ...l, [key]: true }));
+      invoke<T>(command, { repoPath })
+        .then((result) => { setter(result); after?.(); })
+        .catch((e) => setError(String(e)))
+        .finally(() => setLoading((l) => ({ ...l, [key]: false })));
+    };
   }
 
-  function fetchDetails() {
-    if (!repoPath || detailsFetched.current) return;
-    detailsFetched.current = true;
-    setLoading((l) => ({ ...l, details: true }));
-    invoke<DetailsResult>("get_details", { repoPath })
-      .then((result) => setDetailsResult(result))
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading((l) => ({ ...l, details: false })));
-  }
-
-  function fetchTests() {
-    if (!repoPath || testsFetched.current) return;
-    testsFetched.current = true;
-    setLoading((l) => ({ ...l, tests: true }));
-    invoke<TestsResult>("get_tests_result", { repoPath })
-      .then((result) => setTestsResult(result))
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading((l) => ({ ...l, tests: false })));
-  }
-
-  function fetchDiagrams() {
-    if (!repoPath || diagramsFetched.current) return;
-    diagramsFetched.current = true;
-    setLoading((l) => ({ ...l, diagrams: true }));
-    invoke<DiagramsResult>("get_diagrams", { repoPath })
-      .then((result) => setDiagramsResult(result))
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading((l) => ({ ...l, diagrams: false })));
-  }
+  const fetchDetails = makeFetcher<DetailsResult>("details", "get_details", setDetailsResult, detailsFetched);
+  const fetchTests = makeFetcher<TestsResult>("tests", "get_tests_result", setTestsResult, testsFetched);
+  const fetchDiagrams = makeFetcher<DiagramsResult>("diagrams", "get_diagrams", setDiagramsResult, diagramsFetched);
+  const fetchSummary = makeFetcher<SummaryResult>("summary", "get_summary", setSummaryResult, summaryFetched, () => fetchDetails());
 
   return {
     repoPath,

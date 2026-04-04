@@ -1,4 +1,8 @@
 mod git;
+mod json_utils;
+mod prompts;
+mod symbol_finder;
+mod test_parser;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -11,8 +15,8 @@ pub fn run() {
             git::get_summary,
             git::get_details,
             git::get_file_diff,
-            git::find_symbol_definition,
-            git::read_file_range,
+            symbol_finder::find_symbol_definition,
+            symbol_finder::read_file_range,
             git::get_tests_result,
             git::get_diagrams,
         ])

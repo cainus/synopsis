@@ -5,6 +5,10 @@ use tauri::Emitter;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
+use crate::json_utils::{extract_json_array, extract_json_object};
+use crate::prompts;
+use crate::test_parser;
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct FileStat {
     pub path: String,
@@ -218,24 +222,8 @@ pub async fn get_summary(repo_path: String) -> Result<SummaryResult, String> {
         });
     }
 
-    let prompt = r#"Analyze these code changes and produce a brief structured summary.
-
-Respond with ONLY a JSON object with these fields:
-- "headline": a one-sentence summary of all changes in under 15 words
-- "bullets": an array of 3-5 key points, each with:
-  - "label": a bold category label (1-3 words, e.g. "New feature", "Bug fix", "Refactor", "API change", "Dependencies", "Config", "Tests", "Performance")
-  - "text": a single sentence (under 15 words) describing what changed
-
-Rules:
-- Each bullet should cover a distinct aspect of the changes
-- Labels should be short category tags, not sentences
-- Text should be specific and concrete, not vague
-- Total word count across all bullets should stay under 80 words
-- No markdown in values — plain text only
-- No explanation outside the JSON"#;
-
     let mut child = Command::new("claude")
-        .args(["-p", prompt])
+        .args(["-p", prompts::SUMMARY_PROMPT])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -278,45 +266,7 @@ pub async fn get_details(repo_path: String) -> Result<DetailsResult, String> {
 
     // --- Phase 1: Get the tree structure (titles + file paths, no snippets) ---
 
-    let structure_prompt = r#"Analyze these code changes and produce a detailed breakdown.
-
-Respond with ONLY a JSON object with these fields:
-- "product_changes": array (max 4) of user-facing/product changes. Empty array if none.
-- "technical_changes": array (max 4) of technical/architectural changes.
-
-Each item has shape: {"title": "...", "children": [...], "files": [...]}
-The tree is recursive — children have the same shape. Leaf nodes use "children": [].
-"files" is an array of {"file": "..."} objects — just file paths, NO snippets.
-Use "files": [] for organizational nodes that don't reference specific files.
-A single change item may reference multiple files when the change spans several files.
-
-CRITICAL depth rules:
-- Top-level titles: short scannable label (under 12 words), these are clickable headings
-- Level-2 children: descriptive sentences that explain the change in detail (20-40 words each). Every top-level item MUST have 2-4 children at this level.
-- Level-3 children: supporting specifics where helpful. Optional, 1-2 per parent.
-- No deeper than level 3.
-
-CRITICAL file reference rules:
-- Attach files at the most specific level — prefer leaf/detail nodes over top-level groupings
-- Every node that describes a concrete code change MUST have at least one file entry
-- When a single change spans multiple files, include all relevant files
-- Nodes that are purely organizational groupings use "files": []
-
-Example:
-{"product_changes": [], "technical_changes": [
-  {"title": "Auth now uses JWT instead of sessions", "files": [], "children": [
-    {"title": "The express-session middleware was removed and replaced with jwtAuth", "files": [{"file": "src/middleware/auth.ts"}], "children": []},
-    {"title": "Session store dependency removed", "files": [{"file": "package.json"}], "children": []}
-  ]}
-]}
-
-Rules:
-- Maximum 4 top-level items per section
-- Level-2 children are mandatory and must be descriptive (not terse labels)
-- No markdown in values — plain text only
-- No explanation outside the JSON"#;
-
-    let response = run_claude_prompt_async(structure_prompt, diff_output.stdout.clone()).await?;
+    let response = run_claude_prompt_async(prompts::DETAILS_STRUCTURE_PROMPT, diff_output.stdout.clone()).await?;
     let json_str = extract_json_object(&response);
 
     let mut parsed: DetailsResult = serde_json::from_str(&json_str).map_err(|e| {
@@ -364,21 +314,7 @@ Rules:
                     return (section, path, Vec::new());
                 }
 
-                let snippet_prompt = format!(
-                    r#"Given this diff, extract the most relevant code snippets that illustrate this change: "{title}"
-
-Respond with ONLY a JSON object: {{"file_snippets": [{{"file": "...", "snippet": "..."}}]}}
-
-Rules:
-- Each snippet should be 10-30 lines of verbatim diff content (including +/- prefixes)
-- Include @@ hunk headers for context
-- Focus on the most behaviorally meaningful code: logic changes, new functions, API changes, state management
-- Do NOT include imports, type declarations, or boilerplate unless they ARE the change
-- Return 1-3 snippets total, picking the most important parts
-- "file" must be the exact file path from the diff
-- Copy lines exactly from the diff — do not edit or summarize"#,
-                    title = title
-                );
+                let snippet_prompt = prompts::snippet_prompt(&title);
 
                 let result = run_claude_prompt_async(&snippet_prompt, combined_diff).await;
                 let snippets = match result {
@@ -520,430 +456,6 @@ pub async fn get_file_diff(repo_path: String, file: String) -> Result<String, St
     Ok(diff)
 }
 
-#[derive(serde::Serialize, Clone)]
-pub struct DefinitionResult {
-    pub file: String,
-    pub line_number: u32,
-    pub line_content: String,
-    pub context_before: Vec<String>,
-    pub context_after: Vec<String>,
-}
-
-#[tauri::command]
-pub async fn find_symbol_definition(
-    repo_path: String,
-    symbol: String,
-    language_hint: String,
-) -> Result<Vec<DefinitionResult>, String> {
-    // Build language-specific definition patterns
-    let patterns = build_definition_patterns(&symbol, &language_hint);
-    if patterns.is_empty() {
-        return Ok(vec![]);
-    }
-
-    let file_extensions = extensions_for_language(&language_hint);
-
-    let mut all_results = Vec::new();
-    let glob_args: Vec<String> = file_extensions.iter().map(|ext| format!("*.{}", ext)).collect();
-    for pattern in &patterns {
-        let mut args = vec![
-            "-C".to_string(), repo_path.clone(),
-            "grep".to_string(), "-rn".to_string(), "-P".to_string(), pattern.clone(),
-            "--".to_string(),
-        ];
-        for g in &glob_args {
-            args.push(g.clone());
-        }
-
-        let output = Command::new("git")
-            .args(&args)
-            .output()
-            .ok();
-
-        if let Some(output) = output {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines().take(20) {
-                if let Some(result) = parse_grep_line(line, &repo_path) {
-                    if !is_test_file(&result.file) {
-                        all_results.push(result);
-                    }
-                }
-            }
-        }
-    }
-
-    // Deduplicate by file:line
-    all_results.sort_by(|a, b| (&a.file, a.line_number).cmp(&(&b.file, b.line_number)));
-    all_results.dedup_by(|a, b| a.file == b.file && a.line_number == b.line_number);
-    all_results.truncate(10);
-
-    // Read context for each result
-    for result in &mut all_results {
-        if let Ok((before, after)) = read_context(&repo_path, &result.file, result.line_number) {
-            result.context_before = before;
-            result.context_after = after;
-        }
-    }
-
-    Ok(all_results)
-}
-
-fn escape_regex(s: &str) -> String {
-    let mut result = String::with_capacity(s.len() * 2);
-    for c in s.chars() {
-        if "\\^$.|?*+()[]{}".contains(c) {
-            result.push('\\');
-        }
-        result.push(c);
-    }
-    result
-}
-
-fn build_definition_patterns(symbol: &str, language: &str) -> Vec<String> {
-    let s = escape_regex(symbol);
-    // Use a single broad pattern that catches definitions across languages.
-    // The -P flag (PCRE) is used for \s and \b support.
-    match language {
-        "typescript" | "tsx" | "javascript" | "jsx" => vec![
-            format!(r"(function|const|let|var|class|interface|type|enum)\s+{}\b", s),
-        ],
-        "rust" => vec![
-            format!(r"(pub\s+)?(fn|struct|enum|trait|type|const|static|mod)\s+{}\b", s),
-        ],
-        "python" => vec![
-            format!(r"(def|class)\s+{}\b", s),
-        ],
-        "go" => vec![
-            format!(r"(func|type|var)\s+.*?{}\b", s),
-        ],
-        "swift" => vec![
-            format!(r"(func|class|struct|enum|protocol|let|var)\s+{}\b", s),
-        ],
-        "kotlin" | "java" => vec![
-            format!(r"(fun|class|interface|val|var|object)\s+{}\b", s),
-        ],
-        _ => vec![
-            format!(r"(function|def|fn|func|class|struct|interface|type|const|let|var|val|enum)\s+{}\b", s),
-        ],
-    }
-}
-
-fn extensions_for_language(language: &str) -> Vec<&'static str> {
-    match language {
-        "typescript" => vec!["ts", "tsx"],
-        "tsx" => vec!["ts", "tsx"],
-        "javascript" => vec!["js", "jsx", "mjs"],
-        "jsx" => vec!["js", "jsx"],
-        "rust" => vec!["rs"],
-        "python" => vec!["py"],
-        "go" => vec!["go"],
-        "swift" => vec!["swift"],
-        "kotlin" => vec!["kt", "kts"],
-        "java" => vec!["java"],
-        _ => vec!["ts", "tsx", "js", "jsx", "py", "rs", "go"],
-    }
-}
-
-fn parse_grep_line(line: &str, _repo_path: &str) -> Option<DefinitionResult> {
-    // Format: "file:line_number:content"
-    let first_colon = line.find(':')?;
-    let file = &line[..first_colon];
-    let rest = &line[first_colon + 1..];
-    let second_colon = rest.find(':')?;
-    let line_num: u32 = rest[..second_colon].parse().ok()?;
-    let content = rest[second_colon + 1..].trim().to_string();
-
-    Some(DefinitionResult {
-        file: file.to_string(),
-        line_number: line_num,
-        line_content: content,
-        context_before: vec![],
-        context_after: vec![],
-    })
-}
-
-fn read_context(repo_path: &str, file: &str, line_number: u32) -> Result<(Vec<String>, Vec<String>), String> {
-    let file_path = std::path::Path::new(repo_path).join(file);
-    let content = std::fs::read_to_string(&file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-    let all_lines: Vec<&str> = content.lines().collect();
-
-    let idx = (line_number as usize).saturating_sub(1); // 0-based
-    let start_before = idx.saturating_sub(5);
-    let end_after = (idx + 16).min(all_lines.len());
-
-    let before: Vec<String> = all_lines[start_before..idx].iter().map(|s| s.to_string()).collect();
-    let after: Vec<String> = all_lines[idx + 1..end_after].iter().map(|s| s.to_string()).collect();
-
-    Ok((before, after))
-}
-
-#[tauri::command]
-pub async fn read_file_range(
-    repo_path: String,
-    file: String,
-    start_line: u32,
-    end_line: u32,
-) -> Result<String, String> {
-    let file_path = std::path::Path::new(&repo_path).join(&file);
-    let content = std::fs::read_to_string(&file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-    let lines: Vec<&str> = content.lines().collect();
-
-    let start = (start_line as usize).saturating_sub(1);
-    let end = (end_line as usize).min(lines.len());
-
-    Ok(lines[start..end].join("\n"))
-}
-
-fn is_test_file(path: &str) -> bool {
-    let p = path.to_lowercase();
-    let filename = path.split('/').next_back().unwrap_or("").to_lowercase();
-
-    // Match directory segments anywhere in path (including at root)
-    let in_test_dir = |seg: &str| {
-        p.starts_with(&format!("{}/", seg))
-            || p.contains(&format!("/{}/", seg))
-    };
-
-    in_test_dir("test")
-        || in_test_dir("tests")
-        || in_test_dir("__tests__")
-        || in_test_dir("spec")
-        || in_test_dir("specs")
-        || p.ends_with(".test.ts")
-        || p.ends_with(".test.tsx")
-        || p.ends_with(".test.js")
-        || p.ends_with(".test.jsx")
-        || p.ends_with(".spec.ts")
-        || p.ends_with(".spec.tsx")
-        || p.ends_with(".spec.js")
-        || p.ends_with(".spec.jsx")
-        || p.ends_with("_test.go")
-        || p.ends_with("_test.rs")
-        || p.ends_with("_test.py")
-        || p.ends_with("_spec.rb")
-        || filename.starts_with("test_")
-}
-
-/// Extract changed test names from a diff patch.
-/// Returns a list of (full_name, hunk_context) tuples.
-/// Extract all test names from a plain file (no diff). Used for untracked files.
-fn extract_tests_from_content(content: &str) -> Vec<(String, String)> {
-    // Synthesise a fake diff where every line is an addition so the parser works.
-    let fake_diff = format!("@@\n{}", content.lines().map(|l| format!("+{}", l)).collect::<Vec<_>>().join("\n"));
-    extract_changed_tests(&fake_diff)
-}
-
-fn extract_changed_tests(diff: &str) -> Vec<(String, String)> {
-    let mut results = Vec::new();
-    let mut describe_stack: Vec<(usize, String)> = Vec::new(); // (indent, name)
-    let mut current_test: Option<(usize, String)> = None;
-    let mut current_hunk: Vec<String> = Vec::new();
-    let mut in_changed_hunk = false;
-    let mut hunk_has_changes = false;
-    let mut prev_was_test_attr = false; // tracks #[test] attribute for Rust
-
-    for line in diff.lines() {
-        // Skip diff header lines
-        if line.starts_with("diff --git")
-            || line.starts_with("index ")
-            || line.starts_with("--- ")
-            || line.starts_with("+++ ")
-        {
-            continue;
-        }
-
-        if line.starts_with("@@") {
-            // Save previous test if it had changes
-            if hunk_has_changes {
-                if let Some((_, ref name)) = current_test {
-                    results.push((name.clone(), current_hunk.join("\n")));
-                }
-            }
-            current_hunk.clear();
-            in_changed_hunk = true;
-            hunk_has_changes = false;
-            current_test = None;
-            prev_was_test_attr = false;
-            continue;
-        }
-
-        if !in_changed_hunk {
-            continue;
-        }
-
-        // Determine the actual content (strip leading +/-/space)
-        let content = if line.starts_with('+') || line.starts_with('-') || line.starts_with(' ') {
-            &line[1..]
-        } else {
-            line
-        };
-
-        let is_changed = line.starts_with('+') || line.starts_with('-');
-        let indent = content.len() - content.trim_start().len();
-        let trimmed = content.trim();
-
-        // Pop describe stack when indent decreases
-        while let Some(&(d_indent, _)) = describe_stack.last() {
-            if indent <= d_indent {
-                describe_stack.pop();
-            } else {
-                break;
-            }
-        }
-
-        // Detect describe/context blocks
-        if let Some(name) = extract_block_name(trimmed, &["describe(", "context(", "suite("]) {
-            describe_stack.push((indent, name));
-        }
-
-        // Track #[test] attribute for Rust
-        if trimmed == "#[test]" {
-            prev_was_test_attr = true;
-        } else if !trimmed.is_empty() && !trimmed.starts_with("//") && !trimmed.starts_with('#') {
-            // Any non-empty, non-comment, non-attribute line clears the flag after use
-            // (flag is consumed below when we see the fn)
-        }
-
-        // Detect it/test blocks (JS/TS style) and function-style tests (Go/Python/Rust)
-        let block_name = extract_block_name(trimmed, &["it(", "test(", "it.only(", "test.only(", "xit(", "xtest("])
-            .or_else(|| extract_fn_test_name(trimmed))
-            .or_else(|| {
-                // Rust: any fn after a #[test] attribute
-                if prev_was_test_attr { extract_rust_fn_name(trimmed) } else { None }
-            });
-        if let Some(name) = block_name {
-            prev_was_test_attr = false;
-            let full_name = if describe_stack.is_empty() {
-                name.clone()
-            } else {
-                let path: Vec<&str> = describe_stack.iter().map(|(_, n)| n.as_str()).collect();
-                format!("{} > {}", path.join(" > "), name)
-            };
-            // Save previous test if it had changes
-            if hunk_has_changes {
-                if let Some((_, ref prev_name)) = current_test {
-                    results.push((prev_name.clone(), current_hunk.join("\n")));
-                }
-            }
-            current_test = Some((indent, full_name));
-            current_hunk.clear();
-            hunk_has_changes = false;
-        }
-
-        if is_changed {
-            hunk_has_changes = true;
-        }
-
-        if current_test.is_some() {
-            current_hunk.push(line.to_string());
-        }
-    }
-
-    // Final test
-    if hunk_has_changes {
-        if let Some((_, name)) = current_test {
-            results.push((name, current_hunk.join("\n")));
-        }
-    }
-
-    // Deduplicate by name (keep last occurrence)
-    let mut seen = std::collections::HashSet::new();
-    let mut deduped: Vec<(String, String)> = Vec::new();
-    for item in results.into_iter().rev() {
-        if seen.insert(item.0.clone()) {
-            deduped.push(item);
-        }
-    }
-    deduped.reverse();
-    deduped
-}
-
-/// Extract a Rust function name from a `fn` declaration line (any name).
-fn extract_rust_fn_name(trimmed: &str) -> Option<String> {
-    let rest = if trimmed.starts_with("async fn ") {
-        &trimmed["async fn ".len()..]
-    } else if trimmed.starts_with("fn ") {
-        &trimmed["fn ".len()..]
-    } else {
-        return None;
-    };
-    let name = rest.split('(').next()?.trim().to_string();
-    if name.is_empty() { None } else { Some(name) }
-}
-
-/// Extract test names from function-style test definitions (Go, Python, Rust).
-fn extract_fn_test_name(trimmed: &str) -> Option<String> {
-    // Go: func TestFoo(t *testing.T) / func BenchmarkFoo(b *testing.B)
-    if trimmed.starts_with("func Test") || trimmed.starts_with("func Benchmark") {
-        let rest = trimmed.strip_prefix("func ")?;
-        let name = rest.split('(').next()?.trim().to_string();
-        if !name.is_empty() {
-            return Some(name);
-        }
-    }
-    // Python: def test_foo(): / def test_foo(self):
-    if trimmed.starts_with("def test_") {
-        let rest = trimmed.strip_prefix("def ")?;
-        let name = rest.split(|c| c == '(' || c == ':').next()?.trim().to_string();
-        if !name.is_empty() {
-            return Some(name);
-        }
-    }
-    // Rust: fn test_foo() / fn should_foo()
-    if trimmed.starts_with("fn test_") || trimmed.starts_with("fn should_") {
-        let rest = trimmed.strip_prefix("fn ")?;
-        let name = rest.split('(').next()?.trim().to_string();
-        if !name.is_empty() {
-            return Some(name);
-        }
-    }
-    None
-}
-
-fn extract_block_name(trimmed: &str, prefixes: &[&str]) -> Option<String> {
-    for prefix in prefixes {
-        if trimmed.starts_with(prefix) {
-            let rest = &trimmed[prefix.len()..];
-            // Find the string argument: first quoted string
-            if let Some(name) = extract_first_string(rest) {
-                return Some(name);
-            }
-        }
-    }
-    None
-}
-
-fn extract_first_string(s: &str) -> Option<String> {
-    let s = s.trim_start();
-    let (quote, rest) = if s.starts_with('"') {
-        ('"', &s[1..])
-    } else if s.starts_with('\'') {
-        ('\'', &s[1..])
-    } else if s.starts_with('`') {
-        ('`', &s[1..])
-    } else {
-        return None;
-    };
-
-    let mut result = String::new();
-    let mut escaped = false;
-    for ch in rest.chars() {
-        if escaped {
-            result.push(ch);
-            escaped = false;
-        } else if ch == '\\' {
-            escaped = true;
-        } else if ch == quote {
-            return Some(result);
-        } else {
-            result.push(ch);
-        }
-    }
-    None
-}
-
 #[tauri::command]
 pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> {
     let default_branch = detect_default_branch(&repo_path);
@@ -970,18 +482,18 @@ pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> 
     for file in all_files {
         let is_untracked = untracked_set.contains(file);
 
-        if is_test_file(file) {
+        if test_parser::is_test_file(file) {
             any_test_file = true;
             if is_untracked {
                 // Untracked file: read it directly, all tests in it are new
                 let full_path = std::path::Path::new(&repo_path).join(file);
                 let content = std::fs::read_to_string(&full_path).unwrap_or_default();
-                for (name, _) in extract_tests_from_content(&content) {
+                for (name, _) in test_parser::extract_tests_from_content(&content) {
                     all_tests.push((name, String::new(), file.to_string()));
                 }
             } else {
                 let diff = run_git(&repo_path, &["diff", &default_branch, "--", file])?;
-                for (name, hunk) in extract_changed_tests(&diff) {
+                for (name, hunk) in test_parser::extract_changed_tests(&diff) {
                     all_tests.push((name, hunk, file.to_string()));
                 }
             }
@@ -991,7 +503,7 @@ pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> 
                 let content = std::fs::read_to_string(&full_path).unwrap_or_default();
                 if content.contains("#[test]") {
                     any_test_file = true;
-                    for (name, _) in extract_tests_from_content(&content) {
+                    for (name, _) in test_parser::extract_tests_from_content(&content) {
                         all_tests.push((name, String::new(), file.to_string()));
                     }
                 }
@@ -999,7 +511,7 @@ pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> 
                 let diff = run_git(&repo_path, &["diff", &default_branch, "--", file])?;
                 if diff.contains("#[test]") {
                     any_test_file = true;
-                    for (name, hunk) in extract_changed_tests(&diff) {
+                    for (name, hunk) in test_parser::extract_changed_tests(&diff) {
                         all_tests.push((name, hunk, file.to_string()));
                     }
                 }
@@ -1043,12 +555,10 @@ pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> 
     }
 
     // Build prompt for Claude (modified tests only)
-    let mut prompt = String::from(
-        "For each test case below, if the diff shows a behaviour change write ONE English sentence describing what changed. Otherwise write exactly \"No behaviour change\". Respond with ONLY a JSON array with objects {\"full_name\": string, \"behaviour_change\": string}. No markdown, no explanation.\n\nTests:\n",
-    );
-    for (name, hunk, _) in &modified {
-        prompt.push_str(&format!("\n---\nTest: {}\nDiff:\n{}\n", name, hunk));
-    }
+    let test_pairs: Vec<(String, String)> = modified.iter()
+        .map(|(name, hunk, _)| (name.clone(), hunk.clone()))
+        .collect();
+    let prompt = prompts::tests_prompt(&test_pairs);
 
     let child = Command::new("claude")
         .args(["-p", &prompt])
@@ -1112,21 +622,6 @@ pub async fn get_tests_result(repo_path: String) -> Result<TestsResult, String> 
     Ok(TestsResult { test_cases })
 }
 
-fn extract_json_array(s: &str) -> String {
-    // Strip markdown code fences if present
-    let s = s.trim();
-    let s = if let Some(start) = s.find('[') {
-        if let Some(end) = s.rfind(']') {
-            &s[start..=end]
-        } else {
-            s
-        }
-    } else {
-        s
-    };
-    s.to_string()
-}
-
 #[tauri::command]
 pub async fn get_diagrams(repo_path: String) -> Result<DiagramsResult, String> {
     let branch = detect_default_branch(&repo_path);
@@ -1146,45 +641,8 @@ pub async fn get_diagrams(repo_path: String) -> Result<DiagramsResult, String> {
         });
     }
 
-    let prompt = r#"Analyze these code changes and produce two Mermaid flowchart diagrams.
-
-IMPORTANT: Every node must represent a function or method. Do NOT use modules, files, classes, components, or any other non-function/method concepts as nodes. Every node label must be a function or method name (e.g. "myFunction()" or "MyClass.myMethod()").
-
-"before": show the key functions/methods involved and how they called each other BEFORE this diff.
-  - Nodes that will be REMOVED (gone in after): class "removed" → fill:#3a1a1a,stroke:#f44336,color:#ccc
-  - Nodes that will be MODIFIED (present in both but changed): class "modified" → fill:#3a2e00,stroke:#ffb300,color:#ccc
-  - Unchanged nodes: no class
-  Include at the top:
-    classDef removed fill:#3a1a1a,stroke:#f44336,color:#ccc
-    classDef modified fill:#3a2e00,stroke:#ffb300,color:#ccc
-  EXTRACT FUNCTION/METHOD RULE: if this diff is an "extract function" or "extract method" refactor,
-  use a Mermaid subgraph in the BEFORE diagram to show the to-be-extracted logic nested inside its
-  parent function. Example:
-    subgraph parentFn["parentFunction()"]
-      extractedLogic["logic to extract"]
-    end
-
-"after": show those same functions/methods and new call relationships AFTER this diff.
-  - Nodes that are NEW (only in after): class "added" → fill:#1a3a1a,stroke:#4caf50,color:#ccc
-  - Nodes that were MODIFIED (present in both but changed): class "modified" → fill:#3a2e00,stroke:#ffb300,color:#ccc
-  - Unchanged nodes: no class
-  Include at the top:
-    classDef added fill:#1a3a1a,stroke:#4caf50,color:#ccc
-    classDef modified fill:#3a2e00,stroke:#ffb300,color:#ccc
-
-Rules:
-- Use `graph LR` direction for both
-- Every node is a function or method — no exceptions
-- Keep it focused, max ~12 nodes each
-- Node labels must look like function calls: e.g. "doThing()" or "Foo.bar()"
-- Node IDs must be alphanumeric (no spaces or special chars)
-- Respond with ONLY a JSON object: {"before": "...", "after": "...", "before_caption": "...", "after_caption": "..."}
-- "before_caption" and "after_caption": one plain-English sentence each describing what the diagram shows
-- Values must be valid Mermaid graph strings with no markdown fences
-- No explanation outside the JSON"#;
-
     let mut child = Command::new("claude")
-        .args(["-p", prompt])
+        .args(["-p", prompts::DIAGRAMS_PROMPT])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -1222,418 +680,4 @@ Rules:
         before_caption: parsed.before_caption,
         after_caption: parsed.after_caption,
     })
-}
-
-fn extract_json_object(s: &str) -> String {
-    let s = s.trim();
-    if let Some(start) = s.find('{') {
-        if let Some(end) = s.rfind('}') {
-            return s[start..=end].to_string();
-        }
-    }
-    s.to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── extract_first_string ──────────────────────────────────────────────────
-
-    #[test]
-    fn test_extract_first_string_double_quotes() {
-        assert_eq!(
-            extract_first_string(r#""hello world", () => {"#),
-            Some("hello world".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_first_string_single_quotes() {
-        assert_eq!(
-            extract_first_string("'single quoted', () => {"),
-            Some("single quoted".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_first_string_backticks() {
-        assert_eq!(
-            extract_first_string("`template string`"),
-            Some("template string".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_first_string_escaped_quote() {
-        assert_eq!(
-            extract_first_string(r#""escaped \"inner\" quote""#),
-            Some(r#"escaped "inner" quote"#.into())
-        );
-    }
-
-    #[test]
-    fn test_extract_first_string_no_quote_returns_none() {
-        assert_eq!(extract_first_string("noQuoteHere"), None);
-    }
-
-    #[test]
-    fn test_extract_first_string_unterminated_returns_none() {
-        assert_eq!(extract_first_string(r#""unterminated"#), None);
-    }
-
-    #[test]
-    fn test_extract_first_string_leading_whitespace() {
-        assert_eq!(
-            extract_first_string(r#"   "leading space""#),
-            Some("leading space".into())
-        );
-    }
-
-    // ── extract_block_name ────────────────────────────────────────────────────
-
-    #[test]
-    fn test_extract_block_name_describe() {
-        assert_eq!(
-            extract_block_name(r#"describe("UserService", () => {"#, &["describe("]),
-            Some("UserService".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_block_name_it() {
-        assert_eq!(
-            extract_block_name(r#"it("returns 404 when not found", () => {"#, &["it("]),
-            Some("returns 404 when not found".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_block_name_no_match_returns_none() {
-        assert_eq!(
-            extract_block_name(r#"const x = 1;"#, &["describe(", "it("]),
-            None
-        );
-    }
-
-    #[test]
-    fn test_extract_block_name_picks_correct_prefix() {
-        assert_eq!(
-            extract_block_name(r#"test("does something")"#, &["describe(", "it(", "test("]),
-            Some("does something".into())
-        );
-    }
-
-    // ── is_test_file ──────────────────────────────────────────────────────────
-
-    #[test]
-    fn test_is_test_file_dot_test_ts() {
-        assert!(is_test_file("src/utils.test.ts"));
-    }
-
-    #[test]
-    fn test_is_test_file_dot_spec_tsx() {
-        assert!(is_test_file("src/components/Button.spec.tsx"));
-    }
-
-    #[test]
-    fn test_is_test_file_jest_tests_dir() {
-        assert!(is_test_file("src/__tests__/auth.ts"));
-    }
-
-    #[test]
-    fn test_is_test_file_tests_dir() {
-        assert!(is_test_file("tests/integration/login.ts"));
-    }
-
-    #[test]
-    fn test_is_test_file_go_test() {
-        assert!(is_test_file("pkg/parser/parser_test.go"));
-    }
-
-    #[test]
-    fn test_is_test_file_rust_test() {
-        assert!(is_test_file("src/lib_test.rs"));
-    }
-
-    #[test]
-    fn test_is_test_file_python_prefix() {
-        assert!(is_test_file("test_utils.py"));
-    }
-
-    #[test]
-    fn test_is_test_file_regular_source_file() {
-        assert!(!is_test_file("src/utils.ts"));
-    }
-
-    #[test]
-    fn test_is_test_file_regular_tsx() {
-        assert!(!is_test_file("src/components/Button.tsx"));
-    }
-
-    #[test]
-    fn test_is_test_file_readme() {
-        assert!(!is_test_file("README.md"));
-    }
-
-    // ── extract_json_array ────────────────────────────────────────────────────
-
-    #[test]
-    fn test_extract_json_array_bare() {
-        let input = r#"[{"full_name":"foo","behaviour_change":"bar"}]"#;
-        assert_eq!(extract_json_array(input), input);
-    }
-
-    #[test]
-    fn test_extract_json_array_strips_markdown_fence() {
-        let input = "```json\n[{\"full_name\":\"foo\",\"behaviour_change\":\"bar\"}]\n```";
-        assert_eq!(
-            extract_json_array(input),
-            r#"[{"full_name":"foo","behaviour_change":"bar"}]"#
-        );
-    }
-
-    #[test]
-    fn test_extract_json_array_leading_text() {
-        let input = "Here is the result:\n[{\"a\":\"b\"}]";
-        assert_eq!(extract_json_array(input), r#"[{"a":"b"}]"#);
-    }
-
-    // ── extract_changed_tests ─────────────────────────────────────────────────
-
-    #[test]
-    fn test_extract_changed_tests_simple_it_block() {
-        let diff = r#"diff --git a/foo.test.ts b/foo.test.ts
-@@ -1,5 +1,5 @@
- describe("MyService", () => {
--  it("returns null on error", () => {
-+  it("returns null on error", () => {
--    expect(service.get()).toBeNull();
-+    expect(service.get()).toBeNull();
-   });
- });"#;
-        let tests = extract_changed_tests(diff);
-        assert_eq!(tests.len(), 1);
-        assert_eq!(tests[0].0, "MyService > returns null on error");
-    }
-
-    #[test]
-    fn test_extract_changed_tests_nested_describe() {
-        let diff = r#"@@ -1,8 +1,8 @@
- describe("Auth", () => {
-   describe("login", () => {
-     it("rejects bad password", () => {
--      expect(login("x")).toBe(false);
-+      expect(login("x")).rejects.toThrow();
-     });
-   });
- });"#;
-        let tests = extract_changed_tests(diff);
-        assert_eq!(tests.len(), 1);
-        assert_eq!(tests[0].0, "Auth > login > rejects bad password");
-    }
-
-    #[test]
-    fn test_extract_changed_tests_unchanged_test_not_returned() {
-        // No +/- lines inside the it block — should not be returned
-        let diff = r#"@@ -1,5 +1,5 @@
- describe("Foo", () => {
-   it("does nothing", () => {
-     expect(true).toBe(true);
-   });
- });"#;
-        let tests = extract_changed_tests(diff);
-        assert_eq!(tests.len(), 0);
-    }
-
-    #[test]
-    fn test_extract_changed_tests_multiple_tests_in_file() {
-        let diff = r#"@@ -1,10 +1,10 @@
- describe("Parser", () => {
-   it("handles empty input", () => {
--    expect(parse("")).toBe(null);
-+    expect(parse("")).toStrictEqual({});
-   });
-   it("handles valid input", () => {
--    expect(parse("ok")).toBe("ok");
-+    expect(parse("ok")).toEqual({ value: "ok" });
-   });
- });"#;
-        let tests = extract_changed_tests(diff);
-        assert_eq!(tests.len(), 2);
-        assert_eq!(tests[0].0, "Parser > handles empty input");
-        assert_eq!(tests[1].0, "Parser > handles valid input");
-    }
-
-    #[test]
-    fn test_extract_changed_tests_top_level_test_no_describe() {
-        let diff = r#"@@ -1,3 +1,3 @@
- test("standalone test", () => {
--  expect(1).toBe(1);
-+  expect(1).toBe(2);
- });"#;
-        let tests = extract_changed_tests(diff);
-        assert_eq!(tests.len(), 1);
-        assert_eq!(tests[0].0, "standalone test");
-    }
-
-    #[test]
-    fn test_extract_changed_tests_single_quoted_names() {
-        let diff = r#"@@ -1,3 +1,3 @@
- describe('outer', () => {
-   it('inner test', () => {
--    return 1;
-+    return 2;
-   });
- });"#;
-        let tests = extract_changed_tests(diff);
-        assert_eq!(tests.len(), 1);
-        assert_eq!(tests[0].0, "outer > inner test");
-    }
-
-    // ── is_test_file (additional) ─────────────────────────────────────────────
-
-    #[test]
-    fn test_is_test_file_python_suffix() {
-        assert!(is_test_file("src/utils_test.py"));
-    }
-
-    // ── extract_rust_fn_name ──────────────────────────────────────────────────
-
-    #[test]
-    fn test_extract_rust_fn_name_plain() {
-        assert_eq!(
-            extract_rust_fn_name("fn my_function() {"),
-            Some("my_function".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_rust_fn_name_async() {
-        assert_eq!(
-            extract_rust_fn_name("async fn handle_request() {"),
-            Some("handle_request".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_rust_fn_name_no_match() {
-        assert_eq!(extract_rust_fn_name("let x = 1;"), None);
-    }
-
-    // ── extract_fn_test_name ──────────────────────────────────────────────────
-
-    #[test]
-    fn test_extract_fn_test_name_go_test() {
-        assert_eq!(
-            extract_fn_test_name("func TestParseInput(t *testing.T) {"),
-            Some("TestParseInput".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_fn_test_name_go_benchmark() {
-        assert_eq!(
-            extract_fn_test_name("func BenchmarkSort(b *testing.B) {"),
-            Some("BenchmarkSort".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_fn_test_name_python() {
-        assert_eq!(
-            extract_fn_test_name("def test_returns_none():"),
-            Some("test_returns_none".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_fn_test_name_python_with_self() {
-        assert_eq!(
-            extract_fn_test_name("def test_login(self):"),
-            Some("test_login".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_fn_test_name_rust_test_prefix() {
-        assert_eq!(
-            extract_fn_test_name("fn test_parse_empty() {"),
-            Some("test_parse_empty".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_fn_test_name_rust_should_prefix() {
-        assert_eq!(
-            extract_fn_test_name("fn should_return_error() {"),
-            Some("should_return_error".into())
-        );
-    }
-
-    #[test]
-    fn test_extract_fn_test_name_no_match() {
-        assert_eq!(extract_fn_test_name("fn helper() {"), None);
-        assert_eq!(extract_fn_test_name("let x = 1;"), None);
-    }
-
-    // ── extract_changed_tests: #[test] attribute tracking ────────────────────
-
-    #[test]
-    fn test_extract_changed_tests_rust_test_attr() {
-        let diff = r#"@@ -1,5 +1,6 @@
- #[cfg(test)]
- mod tests {
-     #[test]
--    fn parses_empty() {
--        assert_eq!(parse(""), None);
-+    fn parses_empty() {
-+        assert_eq!(parse(""), Some(""));
-     }
- }"#;
-        let tests = extract_changed_tests(diff);
-        assert_eq!(tests.len(), 1);
-        assert_eq!(tests[0].0, "parses_empty");
-    }
-
-    #[test]
-    fn test_extract_changed_tests_rust_test_attr_arbitrary_name() {
-        // #[test] should pick up any fn name, not just test_ prefix
-        let diff = r#"@@ -1,4 +1,4 @@
- #[test]
- fn it_handles_overflow() {
--    assert!(overflow(i32::MAX).is_err());
-+    assert_eq!(overflow(i32::MAX), Err(OverflowError));
- }"#;
-        let tests = extract_changed_tests(diff);
-        assert_eq!(tests.len(), 1);
-        assert_eq!(tests[0].0, "it_handles_overflow");
-    }
-
-    #[test]
-    fn test_extract_changed_tests_go_func() {
-        let diff = r#"@@ -1,5 +1,5 @@
- func TestParseInput(t *testing.T) {
--    got := parse("")
-+    got := parse("input")
-     if got == nil {
-         t.Fatal("expected non-nil")
-     }
- }"#;
-        let tests = extract_changed_tests(diff);
-        assert_eq!(tests.len(), 1);
-        assert_eq!(tests[0].0, "TestParseInput");
-    }
-
-    #[test]
-    fn test_extract_changed_tests_python_def() {
-        let diff = r#"@@ -1,3 +1,3 @@
- def test_returns_none():
--    assert helper() is None
-+    assert helper() == []
-"#;
-        let tests = extract_changed_tests(diff);
-        assert_eq!(tests.len(), 1);
-        assert_eq!(tests[0].0, "test_returns_none");
-    }
 }

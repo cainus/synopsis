@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { SummaryResult } from "../types";
+import { ThinkingSpinner } from "./ThinkingSpinner";
 
 interface Props {
   result: SummaryResult | null;
@@ -17,10 +18,7 @@ export function SummaryTab({ result, loading, hasRepo, onGenerate }: Props) {
 
   if (!result) {
     return (
-      <div className="flex items-center justify-center gap-2.5 text-muted-foreground py-12 text-sm">
-        <span className="inline-block w-3.5 h-3.5 border-2 border-muted border-t-primary rounded-full animate-spin shrink-0" />
-        Thinking…
-      </div>
+      <ThinkingSpinner />
     );
   }
 

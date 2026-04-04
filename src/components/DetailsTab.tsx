@@ -18,6 +18,8 @@ import {
 import type { DetailsResult, SummaryChangeItem, FileSnippet } from "../types";
 import { DiffModal } from "./DiffModal";
 import { DefinitionPopover } from "./DefinitionPopover";
+import { ThinkingSpinner } from "./ThinkingSpinner";
+import { diffBg, diffClass } from "@/lib/diffStyles";
 
 interface Props {
   result: DetailsResult | null;
@@ -176,17 +178,8 @@ function SnippetBlock({ snippet, filePath, onTokenClick }: { snippet: string; fi
 
   const tokens = useHighlighter(codeLines, filePath);
 
-  function bgFor(line: string): string {
-    if (line.startsWith("+")) return "bg-green-500/8";
-    if (line.startsWith("-")) return "bg-red-400/8";
-    return "";
-  }
-
-  function classFor(line: string): string {
-    if (line.startsWith("+")) return "text-green-500 bg-green-500/8";
-    if (line.startsWith("-")) return "text-red-400 bg-red-400/8";
-    return "";
-  }
+  const bgFor = diffBg;
+  const classFor = diffClass;
 
   return (
     <pre className="m-0 font-mono text-xs leading-relaxed text-muted-foreground whitespace-pre tab-[4]">
@@ -310,10 +303,7 @@ export function DetailsTab({ result, loading, hasRepo, onGenerate, repoPath }: P
 
   if (!result) {
     return (
-      <div className="flex items-center justify-center gap-2.5 text-muted-foreground py-12 text-sm">
-        <span className="inline-block w-3.5 h-3.5 border-2 border-muted border-t-primary rounded-full animate-spin shrink-0" />
-        Thinking…
-      </div>
+      <ThinkingSpinner />
     );
   }
 
