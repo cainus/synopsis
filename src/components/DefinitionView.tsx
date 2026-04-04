@@ -12,7 +12,6 @@ import type { DefinitionResult } from "../types";
 
 interface Props {
   result: DefinitionResult;
-  repoPath: string;
   onClose: () => void;
   onBack?: () => void;
 }

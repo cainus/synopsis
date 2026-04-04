@@ -16,9 +16,7 @@ export function useHighlighter(
     }
 
     let cancelled = false;
-    console.log("[useHighlighter] Highlighting", lines.length, "lines as", lang);
     highlightCode(code, lang).then((result) => {
-      console.log("[useHighlighter] Got tokens:", result ? result.length : "null");
       if (!cancelled) setTokens(result);
     });
 

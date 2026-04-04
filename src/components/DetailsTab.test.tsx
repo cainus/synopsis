@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DetailsTab } from "./DetailsTab";
+import { RepoProvider } from "@/contexts/RepoContext";
 import type { DetailsResult } from "../types";
 
 const mockResult: DetailsResult = {
@@ -43,8 +44,11 @@ const defaultProps = {
   loading: false,
   hasRepo: true,
   onGenerate: vi.fn(),
-  repoPath: "/test/repo",
 };
+
+function renderWithRepo(ui: React.ReactElement, repoPath: string | null = "/test/repo") {
+  return render(<RepoProvider value={repoPath}>{ui}</RepoProvider>);
+}
 
 function getCollapsibleFor(buttonText: string) {
   const btn = screen.getByText(buttonText);
@@ -53,23 +57,23 @@ function getCollapsibleFor(buttonText: string) {
 
 describe("DetailsTab", () => {
   it("shows empty state before a repo is picked", () => {
-    render(<DetailsTab result={null} {...defaultProps} hasRepo={false} />);
+    renderWithRepo(<DetailsTab result={null} {...defaultProps} hasRepo={false} />);
     expect(screen.getByText(/pick a repo folder/i)).toBeInTheDocument();
   });
 
   it("auto-generates when repo is picked but no result yet", () => {
     const onGenerate = vi.fn();
-    render(<DetailsTab result={null} {...defaultProps} onGenerate={onGenerate} />);
+    renderWithRepo(<DetailsTab result={null} {...defaultProps} onGenerate={onGenerate} />);
     expect(onGenerate).toHaveBeenCalledOnce();
   });
 
   it("shows spinner when no result yet", () => {
-    render(<DetailsTab result={null} {...defaultProps} />);
+    renderWithRepo(<DetailsTab result={null} {...defaultProps} />);
     expect(screen.getByText(/thinking/i)).toBeInTheDocument();
   });
 
   it("renders section headings and top-level titles", () => {
-    render(<DetailsTab result={mockResult} {...defaultProps} />);
+    renderWithRepo(<DetailsTab result={mockResult} {...defaultProps} />);
     expect(screen.getByText("Product Changes")).toBeInTheDocument();
     expect(screen.getByText("Technical Changes")).toBeInTheDocument();
     expect(screen.getByText("Users now stay logged in longer")).toBeInTheDocument();
@@ -77,7 +81,7 @@ describe("DetailsTab", () => {
   });
 
   it("top-level items start collapsed and expand on click", async () => {
-    render(<DetailsTab result={mockResult} {...defaultProps} />);
+    renderWithRepo(<DetailsTab result={mockResult} {...defaultProps} />);
     const collapsible = getCollapsibleFor("Users now stay logged in longer");
     expect(collapsible).toHaveAttribute("data-closed", "");
 
@@ -89,7 +93,7 @@ describe("DetailsTab", () => {
   });
 
   it("only one top-level item open at a time across sections", async () => {
-    render(<DetailsTab result={mockResult} {...defaultProps} />);
+    renderWithRepo(<DetailsTab result={mockResult} {...defaultProps} />);
     const productCollapsible = getCollapsibleFor("Users now stay logged in longer");
     const techCollapsible = getCollapsibleFor("Replaced session middleware with JWT middleware");
 
@@ -102,7 +106,7 @@ describe("DetailsTab", () => {
   });
 
   it("nested nodes with children are independently collapsible", async () => {
-    render(<DetailsTab result={mockResult} {...defaultProps} />);
+    renderWithRepo(<DetailsTab result={mockResult} {...defaultProps} />);
     await userEvent.click(screen.getByText("Replaced session middleware with JWT middleware"));
 
     const nestedCollapsible = getCollapsibleFor("New jwtAuth middleware validates tokens on each request");
@@ -113,13 +117,13 @@ describe("DetailsTab", () => {
   });
 
   it("shows code icon button for items with files", () => {
-    render(<DetailsTab result={mockResult} {...defaultProps} />);
+    renderWithRepo(<DetailsTab result={mockResult} {...defaultProps} />);
     const codeButtons = screen.getAllByTitle("View code changes");
     expect(codeButtons.length).toBeGreaterThan(0);
   });
 
   it("does not show code icon for items without files", () => {
-    render(<DetailsTab result={mockResult} {...defaultProps} />);
+    renderWithRepo(<DetailsTab result={mockResult} {...defaultProps} />);
     // "Users now stay logged in longer" has files: [] — should not have a code button
     const title = screen.getByText("Users now stay logged in longer");
     const listItem = title.closest("li")!;
@@ -127,7 +131,7 @@ describe("DetailsTab", () => {
   });
 
   it("opens diff modal with all file snippets when code button is clicked", async () => {
-    render(<DetailsTab result={mockResult} {...defaultProps} />);
+    renderWithRepo(<DetailsTab result={mockResult} {...defaultProps} />);
     // "Added token refresh endpoint" has files directly
     const codeButtons = screen.getAllByTitle("View code changes");
     await userEvent.click(codeButtons[codeButtons.length - 1]);
@@ -148,7 +152,7 @@ describe("DetailsTab", () => {
         },
       ],
     };
-    render(<DetailsTab result={multiFileResult} {...defaultProps} />);
+    renderWithRepo(<DetailsTab result={multiFileResult} {...defaultProps} />);
     await userEvent.click(screen.getByText("Refactored auth across multiple files"));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     // Both file snippets should appear in the combined output
@@ -159,7 +163,7 @@ describe("DetailsTab", () => {
 
   it("hides section when there are no items", () => {
     const noProduct: DetailsResult = { ...mockResult, product_changes: [] };
-    render(<DetailsTab result={noProduct} {...defaultProps} />);
+    renderWithRepo(<DetailsTab result={noProduct} {...defaultProps} />);
     expect(screen.queryByText("Product Changes")).not.toBeInTheDocument();
     expect(screen.getByText("Technical Changes")).toBeInTheDocument();
   });

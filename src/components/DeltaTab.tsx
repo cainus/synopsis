@@ -12,11 +12,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import type { DeltaResult } from "../types";
 import { DiffModal } from "./DiffModal";
+import { useRepoPath } from "@/contexts/RepoContext";
 
 interface Props {
   result: DeltaResult | null;
   loading: boolean;
-  repoPath: string | null;
 }
 
 const statusColor = {
@@ -25,12 +25,12 @@ const statusColor = {
   deleted: "text-red-400",
 } as const;
 
-export function DeltaTab({ result, loading, repoPath }: Props) {
+export function DeltaTab({ result, loading }: Props) {
+  const repoPath = useRepoPath();
   const [modalDiff, setModalDiff] = useState<string | null>(null);
   const [modalFile, setModalFile] = useState("");
 
   const openFile = useCallback(async (path: string) => {
-    if (!repoPath) return;
     try {
       const diff = await invoke<string>("get_file_diff", { repoPath, file: path });
       setModalFile(path);
@@ -102,7 +102,7 @@ export function DeltaTab({ result, loading, repoPath }: Props) {
         </TableFooter>
       </Table>
       {modalDiff !== null && (
-        <DiffModal diff={modalDiff} title={modalFile} onClose={closeModal} repoPath={repoPath} />
+        <DiffModal diff={modalDiff} title={modalFile} onClose={closeModal} />
       )}
     </div>
   );

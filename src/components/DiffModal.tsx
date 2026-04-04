@@ -18,7 +18,6 @@ interface Props {
   diff: string;
   title: string;
   onClose: () => void;
-  repoPath?: string | null;
 }
 
 const bgFor = diffBg;
@@ -238,7 +237,7 @@ function SideBySideView({ lines, filePath, onTokenClick }: { lines: string[]; fi
   );
 }
 
-export function DiffModal({ diff, title, onClose, repoPath }: Props) {
+export function DiffModal({ diff, title, onClose }: Props) {
   const [mode, setMode] = useState<ViewMode>("inline");
   const [popover, setPopover] = useState<{ symbol: string; position: { x: number; y: number } } | null>(null);
 
@@ -252,11 +251,8 @@ export function DiffModal({ diff, title, onClose, repoPath }: Props) {
   ), [diff]);
 
   const handleTokenClick = useCallback((symbol: string, position: { x: number; y: number }) => {
-    console.log("[DiffModal] Token clicked:", symbol, "repoPath:", repoPath);
-    if (repoPath) {
-      setPopover({ symbol, position });
-    }
-  }, [repoPath]);
+    setPopover({ symbol, position });
+  }, []);
 
   return (
     <>
@@ -292,16 +288,15 @@ export function DiffModal({ diff, title, onClose, repoPath }: Props) {
           </DialogHeader>
           <div className="overflow-auto flex-1">
             {mode === "inline"
-              ? <InlineView lines={lines} filePath={title} onTokenClick={repoPath ? handleTokenClick : undefined} />
-              : <SideBySideView lines={lines} filePath={title} onTokenClick={repoPath ? handleTokenClick : undefined} />}
+              ? <InlineView lines={lines} filePath={title} onTokenClick={handleTokenClick} />
+              : <SideBySideView lines={lines} filePath={title} onTokenClick={handleTokenClick} />}
           </div>
         </DialogContent>
       </Dialog>
-      {popover && repoPath && (
+      {popover && (
         <DefinitionPopover
           symbol={popover.symbol}
           filePath={title}
-          repoPath={repoPath}
           position={popover.position}
           onClose={() => setPopover(null)}
         />

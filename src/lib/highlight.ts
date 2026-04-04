@@ -10,16 +10,9 @@ const PRELOADED_LANGS = [
 
 export function getHighlighter(): Promise<Highlighter> {
   if (!highlighterPromise) {
-    console.log("[highlight] Creating highlighter...");
     highlighterPromise = createHighlighter({
       themes: ["github-dark"],
       langs: [...PRELOADED_LANGS],
-    }).then((h) => {
-      console.log("[highlight] Highlighter ready");
-      return h;
-    }).catch((e) => {
-      console.error("[highlight] Failed to create highlighter:", e);
-      throw e;
     });
   }
   return highlighterPromise;
@@ -71,7 +64,6 @@ export async function highlightCode(
     // Load language on demand if not already loaded
     const loaded = h.getLoadedLanguages();
     if (!loaded.includes(lang as BundledLanguage)) {
-      console.log("[highlight] Loading language on demand:", lang);
       await h.loadLanguage(lang as BundledLanguage);
     }
     const result = h.codeToTokens(code, { lang: lang as BundledLanguage, theme: "github-dark" });

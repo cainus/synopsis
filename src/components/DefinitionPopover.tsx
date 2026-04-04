@@ -5,16 +5,17 @@ import { Button } from "@/components/ui/button";
 import { langFromPath } from "@/lib/highlight";
 import type { DefinitionResult } from "../types";
 import { DefinitionView } from "./DefinitionView";
+import { useRepoPath } from "@/contexts/RepoContext";
 
 interface Props {
   symbol: string;
   filePath: string;
-  repoPath: string;
   position: { x: number; y: number };
   onClose: () => void;
 }
 
-export function DefinitionPopover({ symbol, filePath, repoPath, position, onClose }: Props) {
+export function DefinitionPopover({ symbol, filePath, position, onClose }: Props) {
+  const repoPath = useRepoPath();
   const [results, setResults] = useState<DefinitionResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedResult, setSelectedResult] = useState<DefinitionResult | null>(null);
@@ -48,7 +49,6 @@ export function DefinitionPopover({ symbol, filePath, repoPath, position, onClos
     return (
       <DefinitionView
         result={selectedResult}
-        repoPath={repoPath}
         onClose={onClose}
         onBack={results && results.length > 1 ? () => setSelectedResult(null) : undefined}
       />

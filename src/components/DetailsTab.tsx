@@ -1,32 +1,19 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { CodeXmlIcon, FileCodeIcon, XIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useHighlighter } from "@/hooks/useHighlighter";
-import { HighlightedLine } from "./HighlightedLine";
+import { useState, useCallback, useEffect } from "react";
+import { CodeXmlIcon } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import type { DetailsResult, SummaryChangeItem, FileSnippet } from "../types";
-import { DiffModal } from "./DiffModal";
-import { DefinitionPopover } from "./DefinitionPopover";
+import { SnippetModal } from "./SnippetModal";
 import { ThinkingSpinner } from "./ThinkingSpinner";
-import { diffBg, diffClass } from "@/lib/diffStyles";
 
 interface Props {
   result: DetailsResult | null;
   loading: boolean;
   hasRepo: boolean;
   onGenerate: () => void;
-  repoPath: string | null;
 }
 
 function CodeButton({ item, onShowFiles }: { item: SummaryChangeItem; onShowFiles: (title: string, files: FileSnippet[]) => void }) {
@@ -160,124 +147,7 @@ function TopLevelList({
   );
 }
 
-/** Inline snippet renderer — just the diff lines, no modal chrome */
-function SnippetBlock({ snippet, filePath, onTokenClick }: { snippet: string; filePath: string; onTokenClick?: (symbol: string, position: { x: number; y: number }) => void }) {
-  const lines = useMemo(() => snippet.split("\n").filter((line) =>
-    !line.startsWith("diff --git ") &&
-    !line.startsWith("index ") &&
-    !line.startsWith("new file ") &&
-    !line.startsWith("deleted file ") &&
-    !line.startsWith("--- ") &&
-    !line.startsWith("+++ ") &&
-    !line.startsWith("@@ ")
-  ), [snippet]);
-
-  const codeLines = useMemo(() => lines.map((l) =>
-    l.startsWith("+") || l.startsWith("-") || l.startsWith(" ") ? l.slice(1) : l
-  ), [lines]);
-
-  const tokens = useHighlighter(codeLines, filePath);
-
-  const bgFor = diffBg;
-  const classFor = diffClass;
-
-  return (
-    <pre className="m-0 font-mono text-xs leading-relaxed text-muted-foreground whitespace-pre tab-[4]">
-      {lines.map((line, i) => (
-        <div key={i} className={`min-h-[1em] ${tokens ? bgFor(line) : classFor(line)}`}>
-          {tokens ? (
-            <HighlightedLine tokens={tokens[i] ?? null} plainText={codeLines[i] || "\n"} onTokenClick={onTokenClick} />
-          ) : (
-            line || "\n"
-          )}
-        </div>
-      ))}
-    </pre>
-  );
-}
-
-/** Modal that shows file snippets grouped by filename, with clickable file headers */
-function SnippetModal({ title, files, repoPath, onClose }: {
-  title: string;
-  files: FileSnippet[];
-  repoPath: string | null;
-  onClose: () => void;
-}) {
-  const [fileDiff, setFileDiff] = useState<string | null>(null);
-  const [fileDiffPath, setFileDiffPath] = useState("");
-  const [defPopover, setDefPopover] = useState<{ symbol: string; filePath: string; position: { x: number; y: number } } | null>(null);
-
-  const grouped = groupSnippetsByFile(files);
-
-  async function openFileDiff(filePath: string) {
-    if (!repoPath) return;
-    try {
-      const diff = await invoke<string>("get_file_diff", { repoPath, file: filePath });
-      setFileDiffPath(filePath);
-      setFileDiff(diff);
-    } catch (e) {
-      console.error("Failed to get file diff:", e);
-    }
-  }
-
-  function handleTokenClick(filePath: string) {
-    return (symbol: string, position: { x: number; y: number }) => {
-      if (repoPath) {
-        setDefPopover({ symbol, filePath, position });
-      }
-    };
-  }
-
-  return (
-    <>
-      <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-        <DialogContent showCloseButton={false} className="max-w-[95vw] w-[95vw] max-h-[90vh] flex flex-col p-0 gap-0">
-          <DialogHeader className="flex flex-row items-start justify-between gap-3 px-4 py-3 border-b border-border shrink-0 space-y-0">
-            <DialogTitle className="text-sm text-foreground leading-snug">
-              {title}
-            </DialogTitle>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground shrink-0" onClick={onClose}>
-              <XIcon className="w-4 h-4" />
-            </Button>
-          </DialogHeader>
-          <div className="overflow-auto flex-1 p-0">
-            {grouped.map(({ file, snippets }, i) => (
-              <div key={i}>
-                <button
-                  className="flex items-center gap-1.5 w-full px-4 py-2 bg-muted/50 border-b border-t border-border text-xs font-mono text-primary hover:text-primary/80 hover:bg-muted cursor-pointer text-left"
-                  onClick={() => openFileDiff(file)}
-                  title={`View full diff for ${file}`}
-                >
-                  <FileCodeIcon className="w-3.5 h-3.5 shrink-0" />
-                  {file}
-                </button>
-                {snippets.map((snippet, j) => (
-                  <div key={j} className={j < snippets.length - 1 ? "border-b border-border/50" : ""}>
-                    <SnippetBlock snippet={snippet} filePath={file} onTokenClick={repoPath ? handleTokenClick(file) : undefined} />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-      {fileDiff !== null && (
-        <DiffModal diff={fileDiff} title={fileDiffPath} onClose={() => { setFileDiff(null); setFileDiffPath(""); }} repoPath={repoPath} />
-      )}
-      {defPopover && repoPath && (
-        <DefinitionPopover
-          symbol={defPopover.symbol}
-          filePath={defPopover.filePath}
-          repoPath={repoPath}
-          position={defPopover.position}
-          onClose={() => setDefPopover(null)}
-        />
-      )}
-    </>
-  );
-}
-
-export function DetailsTab({ result, loading, hasRepo, onGenerate, repoPath }: Props) {
+export function DetailsTab({ result, loading, hasRepo, onGenerate }: Props) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [modalTitle, setModalTitle] = useState<string | null>(null);
   const [modalFiles, setModalFiles] = useState<FileSnippet[]>([]);
@@ -312,18 +182,8 @@ export function DetailsTab({ result, loading, hasRepo, onGenerate, repoPath }: P
       <TopLevelList items={result.product_changes} label="Product Changes" prefix="product" expandedKey={expandedKey} onToggle={toggle} onShowFiles={showFiles} />
       <TopLevelList items={result.technical_changes} label="Technical Changes" prefix="technical" expandedKey={expandedKey} onToggle={toggle} onShowFiles={showFiles} />
       {modalTitle !== null && (
-        <SnippetModal title={modalTitle} files={modalFiles} repoPath={repoPath} onClose={closeModal} />
+        <SnippetModal title={modalTitle} files={modalFiles} onClose={closeModal} />
       )}
     </div>
   );
-}
-
-/** Group FileSnippet[] by file path */
-function groupSnippetsByFile(files: FileSnippet[]): { file: string; snippets: string[] }[] {
-  const map = new Map<string, string[]>();
-  for (const fs of files) {
-    if (!map.has(fs.file)) map.set(fs.file, []);
-    map.get(fs.file)!.push(fs.snippet);
-  }
-  return Array.from(map.entries()).map(([file, snippets]) => ({ file, snippets }));
 }
