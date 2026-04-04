@@ -38,7 +38,12 @@ pub async fn find_symbol_definition(
             args.push(g.clone());
         }
 
-        if let Some(output) = Command::new("git").args(&args).output().ok() {
+        let output = Command::new("git").args(&args).output().ok();
+        if let Some(ref output) = output {
+            if !output.status.success() {
+                eprintln!("[synopsis] git grep failed: args={:?}, exit={:?}, stderr={}",
+                    args, output.status.code(), String::from_utf8_lossy(&output.stderr));
+            }
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines().take(20) {
                 if let Some(result) = parse_grep_line(line, &repo_path) {

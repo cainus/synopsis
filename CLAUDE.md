@@ -2,7 +2,7 @@
 
 ## What this project is
 
-A Tauri v2 desktop app (Rust backend, React + TypeScript frontend) for inspecting git branch changes. Users pick a local repo folder and see four tabs: file-level diff stats, a Claude-generated summary, an analysis of changed test cases, and before/after Mermaid impact diagrams.
+A Tauri v2 desktop app (Rust backend, React + TypeScript frontend) for inspecting git branch changes. Users pick a local repo folder and see five tabs: file-level diff stats, a Claude-generated summary, a detailed hierarchical analysis, an analysis of changed test cases, and before/after Mermaid impact diagrams.
 
 ## Spec directory
 
@@ -20,37 +20,55 @@ All feature behaviour is documented in `/spec`. **When making any change to beha
 
 ## Key files
 
-- `src-tauri/src/git.rs` — all Rust logic: git commands, test name parsing, Claude calls
-- `src-tauri/src/lib.rs` — plugin registration and command handler wiring
-- `src/hooks/useRepo.ts` — all data fetching; keeps App.tsx clean
-- `src/App.tsx` — root component, tab routing, folder pick handler
-- `src-tauri/capabilities/default.json` — Tauri permission grants (shell, dialog, events)
+### Rust backend (`src-tauri/src/`)
+- `git.rs` — git commands, Claude orchestration (get_delta, get_summary, get_details, get_diagrams)
+- `prompts.rs` — all Claude prompt strings
+- `test_parser.rs` — test file detection and test name extraction
+- `symbol_finder.rs` — click-to-definition: find_symbol_definition, read_file_range
+- `json_utils.rs` — JSON extraction helpers (extract_json_object, extract_json_array)
+- `lib.rs` — plugin registration and command handler wiring
+
+### Frontend (`src/`)
+- `App.tsx` — root component, tab routing, RepoProvider
+- `contexts/RepoContext.tsx` — app-wide repo path context
+- `hooks/useRepo.ts` — all data fetching; keeps App.tsx clean
+- `hooks/useHighlighter.ts` — async Shiki syntax highlighting hook
+- `lib/highlight.ts` — Shiki singleton, language detection
+- `lib/diffStyles.ts` — shared diff line styling utilities
+- `types.ts` — all TypeScript types mirroring Rust structs
 
 ## Running the app
 
 ```bash
-source "$HOME/.cargo/env"   # if cargo is not on PATH
-npm run tauri dev
+make dev          # builds Rust, then launches Tauri dev server
 ```
 
 ## Running tests
 
 ```bash
-npm test                          # React component tests (Vitest)
-cd src-tauri && cargo test        # Rust unit tests
+make test         # runs both Rust and frontend tests
+make test-rust    # Rust unit + integration tests only
+make test-frontend # Vitest only
+make check        # type-check both Rust and TypeScript (no tests)
 ```
 
 ## Architecture notes
 
-- All git operations run in the Rust backend via `src-tauri/src/git.rs`
+- **Rust crate is at `src-tauri/`.** Always use `cd src-tauri &&` before cargo commands.
+- All git operations run in the Rust backend
 - Claude is invoked via the `claude -p` CLI — it must be installed and on PATH
-- The folder picker and summary streaming use Tauri events; everything else uses `invoke`
-- Delta is fetched eagerly on folder pick; Summary, Tests, and Diagrams are lazy (first tab visit)
-- Two-dot git diff (`git diff <branch>`) is used throughout — covers committed, staged, and unstaged changes and works when HEAD is the default branch
+- The folder picker uses Tauri events; everything else uses `invoke`
+- Delta is fetched eagerly on folder pick; Summary chains to Details; Tests and Diagrams are lazy
+- Two-dot git diff (`git diff <branch>`) is used throughout
+- Syntax highlighting uses Shiki (github-dark theme) with async loading
+- Click-to-definition uses `git grep --no-index -P` with language-specific definition patterns
+- Styling uses Tailwind CSS v4 + shadcn/ui components
 
 ## Conventions
 
-- No component library — plain CSS in `src/App.css`
 - All TypeScript types mirroring Rust structs live in `src/types.ts`
 - Behaviour changes must be reflected in the relevant `spec/` file
 - **Always use the `/pingpong` skill (TDD ping-pong) to implement any changes to source code**
+- **New Tauri commands must have integration tests before merging.** Create a temp git repo in the test, exercise the command, and verify results. See `symbol_finder.rs` tests for the pattern.
+- **No React components defined as inner functions.** Always use separate files. Inner function components break React hot-reload when hooks are added or removed.
+- **Use `RepoContext` for repo path access.** Don't pass `repoPath` as a prop — use `useRepoPath()` from `src/contexts/RepoContext.tsx`. It returns a non-nullable `string` and throws if no provider is present.

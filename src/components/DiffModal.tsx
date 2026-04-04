@@ -11,6 +11,7 @@ import { useHighlighter } from "@/hooks/useHighlighter";
 import { HighlightedLine } from "./HighlightedLine";
 import { DefinitionPopover } from "./DefinitionPopover";
 import { diffBg, diffClass } from "@/lib/diffStyles";
+import { isProseFile } from "@/lib/highlight";
 
 type ViewMode = "inline" | "side-by-side";
 
@@ -86,9 +87,10 @@ function InlineView({ lines, filePath, onTokenClick }: { lines: string[]; filePa
   const numbered = useMemo(() => computeLineNumbers(lines), [lines]);
   const codeLines = useMemo(() => numbered.filter((l) => !l.isHunk).map((l) => l.code), [numbered]);
   const tokens = useHighlighter(codeLines, filePath);
+  const prose = isProseFile(filePath);
 
   return (
-    <pre className="m-0 font-mono text-xs leading-relaxed text-muted-foreground whitespace-pre tab-[4]">
+    <pre className={`m-0 font-mono text-xs leading-relaxed text-muted-foreground tab-[4] ${prose ? "whitespace-pre-wrap break-words" : "whitespace-pre"}`}>
       {numbered.map((entry, i) => (
         <div key={i} className={`flex min-h-[1em] ${tokens && !entry.isHunk ? entry.bg : entry.cls}`}>
           <span className="inline-block w-10 shrink-0 text-right pr-2 text-muted-foreground/30 select-none">{entry.oldNum}</span>
@@ -118,6 +120,7 @@ interface SideEntry {
 }
 
 function SideBySideView({ lines, filePath, onTokenClick }: { lines: string[]; filePath: string; onTokenClick?: (symbol: string, position: { x: number; y: number }) => void }) {
+  const prose = isProseFile(filePath);
   const { left, right, leftCode, rightCode } = useMemo(() => {
     const left: SideEntry[] = [];
     const right: SideEntry[] = [];
@@ -227,10 +230,10 @@ function SideBySideView({ lines, filePath, onTokenClick }: { lines: string[]; fi
 
   return (
     <div className="flex min-h-0">
-      <pre className="flex-1 m-0 font-mono text-xs leading-relaxed text-muted-foreground whitespace-pre tab-[4] overflow-x-auto min-w-0">
+      <pre className={`flex-1 m-0 font-mono text-xs leading-relaxed text-muted-foreground tab-[4] min-w-0 ${prose ? "whitespace-pre-wrap break-words" : "whitespace-pre overflow-x-auto"}`}>
         {renderPane(left, leftTokens)}
       </pre>
-      <pre className="flex-1 m-0 font-mono text-xs leading-relaxed text-muted-foreground whitespace-pre tab-[4] overflow-x-auto min-w-0 border-l border-border">
+      <pre className={`flex-1 m-0 font-mono text-xs leading-relaxed text-muted-foreground tab-[4] min-w-0 border-l border-border ${prose ? "whitespace-pre-wrap break-words" : "whitespace-pre overflow-x-auto"}`}>
         {renderPane(right, rightTokens)}
       </pre>
     </div>

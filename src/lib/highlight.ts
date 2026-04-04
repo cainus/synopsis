@@ -33,6 +33,16 @@ const EXT_TO_LANG: Record<string, string> = {
   dockerfile: "dockerfile",
 };
 
+const PROSE_EXTENSIONS = new Set([
+  "md", "mdx", "txt", "text", "rst", "adoc", "asciidoc", "org",
+  "csv", "tsv", "log", "env", "gitignore", "dockerignore",
+]);
+
+export function isProseFile(filePath: string): boolean {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  return PROSE_EXTENSIONS.has(ext);
+}
+
 export function langFromPath(filePath: string): string | null {
   const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
   const basename = filePath.split("/").pop()?.toLowerCase() ?? "";
