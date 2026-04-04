@@ -21,7 +21,14 @@ All feature behaviour is documented in `/spec`. **When making any change to beha
 ## Key files
 
 ### Rust backend (`src-tauri/src/`)
-- `git.rs` — git commands, Claude orchestration (get_delta, get_summary, get_details, get_diagrams)
+- `git/mod.rs` — re-exports, `run_git()`, `detect_default_branch()`, `pick_folder()`
+- `git/types.rs` — all structs (FileStat, DeltaResult, TestCase, SummaryResult, etc.)
+- `git/claude.rs` — `run_claude_prompt_async()`
+- `git/delta.rs` — `get_delta`, `get_file_diff` + integration tests
+- `git/summary.rs` — `get_summary`
+- `git/details.rs` — `get_details`, `collect_file_nodes`, `set_node_files`
+- `git/tests_cmd.rs` — `get_tests_result`, `collect_changed_tests`, `classify_tests`
+- `git/diagrams.rs` — `get_diagrams`
 - `prompts.rs` — all Claude prompt strings
 - `test_parser.rs` — test file detection and test name extraction
 - `symbol_finder.rs` — click-to-definition: find_symbol_definition, read_file_range
@@ -54,7 +61,7 @@ make check        # type-check both Rust and TypeScript (no tests)
 
 ## Architecture notes
 
-- **Rust crate is at `src-tauri/`.** Always use `cd src-tauri &&` before cargo commands.
+- **Rust crate is at `src-tauri/`.** Always use `make` targets (`make test-rust`, `make check`, etc.) instead of raw `cargo` commands — the Makefile sources `$HOME/.cargo/env` to ensure cargo is on PATH.
 - All git operations run in the Rust backend
 - Claude is invoked via the `claude -p` CLI — it must be installed and on PATH
 - The folder picker uses Tauri events; everything else uses `invoke`

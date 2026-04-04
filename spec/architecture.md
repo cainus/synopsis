@@ -37,7 +37,15 @@ synopsis/
 │   ├── src/
 │   │   ├── main.rs             # Binary entry point
 │   │   ├── lib.rs              # Plugin registration, command wiring
-│   │   └── git.rs              # All git logic and Tauri commands
+│   │   └── git/                # Git logic and Tauri commands (module)
+│   │       ├── mod.rs          # Re-exports, run_git(), detect_default_branch(), pick_folder()
+│   │       ├── types.rs        # All structs (FileStat, DeltaResult, TestCase, etc.)
+│   │       ├── claude.rs       # run_claude_prompt_async()
+│   │       ├── delta.rs        # get_delta, get_file_diff + integration tests
+│   │       ├── summary.rs      # get_summary
+│   │       ├── details.rs      # get_details, collect_file_nodes, set_node_files
+│   │       ├── tests_cmd.rs    # get_tests_result, collect_changed_tests, classify_tests
+│   │       └── diagrams.rs     # get_diagrams
 │   ├── capabilities/
 │   │   └── default.json        # Tauri permission grants
 │   └── tauri.conf.json         # App configuration
@@ -46,7 +54,7 @@ synopsis/
 
 ## Tauri commands
 
-All backend logic lives in `src-tauri/src/git.rs`.
+All backend logic lives in `src-tauri/src/git/` (split into focused modules).
 
 | Command | Type | Description |
 |---------|------|-------------|
