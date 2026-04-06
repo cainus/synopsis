@@ -1,0 +1,33 @@
+src/lib/diffStyles.test.ts
+  a863d7608bdec08f 1-34
+spec/delta-tab.md
+  a863d7608bdec08f 41,46,51
+src-tauri/src/git/delta.rs
+  a863d7608bdec08f 13,16,266-336
+src/components/DiffModal.tsx
+  a863d7608bdec08f 94-95,212-216,220-241
+src-tauri/src/git/types.rs
+  a863d7608bdec08f 1
+src/components/DiffModal.test.tsx
+  a863d7608bdec08f 1-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "83fa917e95c0a503b6512ca6c7e915b98a687cd4",
+  "prompts": {
+    "a863d7608bdec08f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb2a002c-65d1-412d-8d4d-af0ceeee9f4f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Greggory Caines",
+      "messages": [],
+      "total_additions": 335,
+      "total_deletions": 124,
+      "accepted_lines": 244,
+      "overriden_lines": 0
+    }
+  }
+}
