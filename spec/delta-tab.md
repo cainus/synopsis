@@ -38,15 +38,17 @@ Untracked files (on default branch only) are always classified as "added".
 
 **Diff stats:**
 ```
-git diff --numstat <default-branch>
+git diff --numstat --no-renames <default-branch>
 ```
 
 **File statuses:**
 ```
-git diff --name-status <default-branch>
+git diff --name-status --no-renames <default-branch>
 ```
 
 A two-dot (working-tree) diff is used so that staged and unstaged local changes are included, and so that changes are visible even when HEAD is the default branch itself (e.g. working directly on main).
+
+`--no-renames` is used to disable git's rename detection. Without it, renamed files produce mangled paths like `src/models/{old.ts => new.ts}` which break file-click diffs (the path doesn't exist on disk). With `--no-renames`, renames appear as two clean entries — one deleted, one added — with real file paths that work correctly when clicked.
 
 **Untracked files** (when on default branch only):
 ```

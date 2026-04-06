@@ -9,6 +9,5 @@ export function diffBg(line: string): string {
 export function diffClass(line: string): string {
   if (line.startsWith("+")) return "text-green-500 bg-green-500/8";
   if (line.startsWith("-")) return "text-red-400 bg-red-400/8";
-  if (line.startsWith("@@")) return "text-primary";
   return "";
 }

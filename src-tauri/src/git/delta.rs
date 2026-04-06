@@ -10,10 +10,10 @@ pub async fn get_delta(repo_path: String) -> Result<DeltaResult, String> {
 
     // Two-dot diff covers committed, staged, and unstaged changes — and works
     // correctly when HEAD is the default branch itself (e.g. working on main).
-    let out = run_git(&repo_path, &["diff", "--numstat", &default_branch])?;
+    let out = run_git(&repo_path, &["diff", "--numstat", "--no-renames", &default_branch])?;
 
     // Get file statuses (A=added, D=deleted, M=modified, etc.)
-    let status_out = run_git(&repo_path, &["diff", "--name-status", &default_branch])
+    let status_out = run_git(&repo_path, &["diff", "--name-status", "--no-renames", &default_branch])
         .unwrap_or_default();
     let mut status_map = std::collections::HashMap::new();
     for line in status_out.lines() {
@@ -258,6 +258,78 @@ mod tests {
 
         assert!(diff.contains("-# test"));
         assert!(diff.contains("+# updated"));
+
+        cleanup(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_get_delta_handles_renamed_files() {
+        let dir = setup_repo("delta_renamed");
+
+        // Create a file on main
+        std::fs::write(dir.join("old_name.txt"), "line1\nline2\nline3\n").unwrap();
+        git_cmd(&dir, &["add", "."]);
+        git_cmd(&dir, &["-c", "commit.gpgsign=false", "commit", "-m", "add old_name"]);
+
+        // Create feature branch and rename the file
+        git_cmd(&dir, &["checkout", "-b", "feature"]);
+        git_cmd(&dir, &["mv", "old_name.txt", "new_name.txt"]);
+        git_cmd(&dir, &["-c", "commit.gpgsign=false", "commit", "-m", "rename file"]);
+
+        let result = get_delta(dir.to_str().unwrap().to_string()).await.unwrap();
+        assert_eq!(result.current_branch, "feature");
+
+        // Renamed file should appear as two entries: one deleted, one added
+        assert_eq!(result.files.len(), 2, "expected 2 entries (delete + add), got {:?}", result.files);
+
+        // No path should contain rename markers
+        for f in &result.files {
+            assert!(!f.path.contains('{'), "path should not contain '{{': {}", f.path);
+            assert!(!f.path.contains('}'), "path should not contain '}}': {}", f.path);
+            assert!(!f.path.contains("=>"), "path should not contain '=>': {}", f.path);
+        }
+
+        // Should have one deleted and one added
+        let deleted = result.files.iter().find(|f| f.status == "deleted");
+        let added = result.files.iter().find(|f| f.status == "added");
+        assert!(deleted.is_some(), "should have a deleted entry");
+        assert!(added.is_some(), "should have an added entry");
+        assert_eq!(deleted.unwrap().path, "old_name.txt");
+        assert_eq!(added.unwrap().path, "new_name.txt");
+
+        // get_file_diff with the new path should return a non-empty diff
+        let diff = get_file_diff(
+            dir.to_str().unwrap().to_string(),
+            "new_name.txt".to_string(),
+        )
+        .await
+        .unwrap();
+        assert!(!diff.trim().is_empty(), "diff for new_name.txt should not be empty");
+
+        cleanup(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_get_file_diff_new_committed_file() {
+        let dir = setup_repo("file_diff_new_committed");
+
+        // Create feature branch with a new file
+        git_cmd(&dir, &["checkout", "-b", "feature"]);
+        std::fs::write(dir.join("brand_new.txt"), "alpha\nbeta\ngamma\n").unwrap();
+        git_cmd(&dir, &["add", "."]);
+        git_cmd(&dir, &["-c", "commit.gpgsign=false", "commit", "-m", "add new file"]);
+
+        let diff = get_file_diff(
+            dir.to_str().unwrap().to_string(),
+            "brand_new.txt".to_string(),
+        )
+        .await
+        .unwrap();
+
+        // Should contain + lines for the new content
+        assert!(diff.contains("+alpha"), "diff should contain +alpha, got: {}", diff);
+        assert!(diff.contains("+beta"), "diff should contain +beta, got: {}", diff);
+        assert!(diff.contains("+gamma"), "diff should contain +gamma, got: {}", diff);
 
         cleanup(&dir);
     }

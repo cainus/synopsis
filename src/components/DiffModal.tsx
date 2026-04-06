@@ -91,14 +91,12 @@ function InlineView({ lines, filePath, onTokenClick }: { lines: string[]; filePa
 
   return (
     <pre className={`m-0 font-mono text-xs leading-relaxed text-muted-foreground tab-[4] ${prose ? "whitespace-pre-wrap break-words" : "whitespace-pre"}`}>
-      {numbered.map((entry, i) => (
-        <div key={i} className={`flex min-h-[1em] ${tokens && !entry.isHunk ? entry.bg : entry.cls}`}>
+      {numbered.filter((entry) => !entry.isHunk).map((entry, i) => (
+        <div key={i} className={`flex min-h-[1em] ${tokens ? entry.bg : entry.cls}`}>
           <span className="inline-block w-10 shrink-0 text-right pr-2 text-muted-foreground/30 select-none">{entry.oldNum}</span>
           <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/30 select-none border-r border-border mr-3">{entry.newNum}</span>
           <span className="flex-1">
-            {entry.isHunk ? (
-              entry.text || "\n"
-            ) : tokens && entry.codeIndex >= 0 ? (
+            {tokens && entry.codeIndex >= 0 ? (
               <HighlightedLine tokens={tokens[entry.codeIndex] ?? null} plainText={entry.code || "\n"} onTokenClick={onTokenClick} />
             ) : (
               entry.text || "\n"
@@ -211,32 +209,36 @@ function SideBySideView({ lines, filePath, onTokenClick }: { lines: string[]; fi
   const leftTokens = useHighlighter(leftCode, filePath);
   const rightTokens = useHighlighter(rightCode, filePath);
 
-  function renderPane(entries: SideEntry[], allTokens: ReturnType<typeof useHighlighter>) {
-    return entries.map((entry, j) => (
-      <div key={j} className={`flex min-h-[1em] ${allTokens && !entry.isHunk && entry.codeIndex >= 0 ? entry.bg : entry.cls}`}>
-        <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/30 select-none border-r border-border mr-3">{entry.num}</span>
-        <span className="flex-1">
-          {entry.isHunk ? (
-            entry.line || "\n"
-          ) : allTokens && entry.codeIndex >= 0 ? (
-            <HighlightedLine tokens={allTokens[entry.codeIndex] ?? null} plainText={entry.line || "\n"} onTokenClick={onTokenClick} />
-          ) : (
-            entry.line || "\n"
-          )}
-        </span>
-      </div>
-    ));
+  function renderContent(entry: SideEntry, allTokens: ReturnType<typeof useHighlighter>) {
+    if (allTokens && entry.codeIndex >= 0) {
+      return <HighlightedLine tokens={allTokens[entry.codeIndex] ?? null} plainText={entry.line || "\n"} onTokenClick={onTokenClick} />;
+    }
+    return entry.line || "\n";
   }
 
   return (
-    <div className="flex min-h-0">
-      <pre className={`flex-1 m-0 font-mono text-xs leading-relaxed text-muted-foreground tab-[4] min-w-0 ${prose ? "whitespace-pre-wrap break-words" : "whitespace-pre overflow-x-auto"}`}>
-        {renderPane(left, leftTokens)}
-      </pre>
-      <pre className={`flex-1 m-0 font-mono text-xs leading-relaxed text-muted-foreground tab-[4] min-w-0 border-l border-border ${prose ? "whitespace-pre-wrap break-words" : "whitespace-pre overflow-x-auto"}`}>
-        {renderPane(right, rightTokens)}
-      </pre>
-    </div>
+    <pre className={`m-0 font-mono text-xs leading-relaxed text-muted-foreground tab-[4] ${prose ? "whitespace-pre-wrap break-words" : "whitespace-pre"}`}>
+      {left.map((leftEntry, j) => {
+        const rightEntry = right[j];
+        if (leftEntry.isHunk) return null;
+        return (
+          <div key={j} className="flex min-h-[1em]">
+            <div className={`flex-1 flex min-w-0 ${leftTokens && leftEntry.codeIndex >= 0 ? leftEntry.bg : leftEntry.cls}`}>
+              <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/30 select-none border-r border-border mr-3">{leftEntry.num}</span>
+              <span className={`flex-1 ${prose ? "" : "overflow-x-auto"}`}>
+                {renderContent(leftEntry, leftTokens)}
+              </span>
+            </div>
+            <div className={`flex-1 flex min-w-0 border-l border-border ${rightTokens && rightEntry.codeIndex >= 0 ? rightEntry.bg : rightEntry.cls}`}>
+              <span className="inline-block w-10 shrink-0 text-right pr-3 text-muted-foreground/30 select-none border-r border-border mr-3">{rightEntry.num}</span>
+              <span className={`flex-1 ${prose ? "" : "overflow-x-auto"}`}>
+                {renderContent(rightEntry, rightTokens)}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </pre>
   );
 }
 
