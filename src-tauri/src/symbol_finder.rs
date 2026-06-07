@@ -1,4 +1,3 @@
-use std::process::Command;
 use crate::test_parser::is_test_file;
 
 #[derive(serde::Serialize, Clone)]
@@ -23,35 +22,53 @@ pub async fn find_symbol_definition(
     }
 
     let file_extensions = extensions_for_language(&language_hint);
-
-    let mut all_results = Vec::new();
     let glob_args: Vec<String> = file_extensions.iter().map(|ext| format!("*.{}", ext)).collect();
-    for pattern in &patterns {
-        // --no-index searches all files including untracked ones
-        let mut args = vec![
-            "-C".to_string(), repo_path.clone(),
-            "grep".to_string(), "--no-index".to_string(),
-            "-rn".to_string(), "-P".to_string(), pattern.clone(),
-            "--".to_string(),
-        ];
-        for g in &glob_args {
-            args.push(g.clone());
-        }
 
-        let output = Command::new("git").args(&args).output().ok();
-        if let Some(ref output) = output {
-            if !output.status.success() {
-                eprintln!("[synopsis] git grep failed: args={:?}, exit={:?}, stderr={}",
-                    args, output.status.code(), String::from_utf8_lossy(&output.stderr));
+    // Run all patterns in parallel using JoinSet
+    let mut join_set = tokio::task::JoinSet::new();
+    for pattern in patterns {
+        let repo = repo_path.clone();
+        let globs = glob_args.clone();
+        join_set.spawn(async move {
+            let mut args = vec![
+                "-C".to_string(), repo.clone(),
+                "grep".to_string(),
+                "-n".to_string(), "-P".to_string(), pattern.clone(),
+                "--".to_string(),
+            ];
+            for g in &globs {
+                args.push(g.clone());
             }
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines().take(20) {
-                if let Some(result) = parse_grep_line(line, &repo_path) {
-                    if !is_test_file(&result.file) {
-                        all_results.push(result);
+
+            let output = tokio::process::Command::new("git")
+                .args(&args)
+                .output()
+                .await
+                .ok();
+
+            let mut results = Vec::new();
+            if let Some(ref output) = output {
+                if !output.status.success() && output.status.code() != Some(1) {
+                    eprintln!("[synopsis] git grep failed: args={:?}, exit={:?}, stderr={}",
+                        args, output.status.code(), String::from_utf8_lossy(&output.stderr));
+                }
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines().take(20) {
+                    if let Some(result) = parse_grep_line(line, &repo) {
+                        if !is_test_file(&result.file) {
+                            results.push(result);
+                        }
                     }
                 }
             }
+            results
+        });
+    }
+
+    let mut all_results = Vec::new();
+    while let Some(result) = join_set.join_next().await {
+        if let Ok(results) = result {
+            all_results.extend(results);
         }
     }
 
@@ -60,11 +77,21 @@ pub async fn find_symbol_definition(
     all_results.dedup_by(|a, b| a.file == b.file && a.line_number == b.line_number);
     all_results.truncate(10);
 
-    // Read context for each result
-    for result in &mut all_results {
-        if let Ok((before, after)) = read_context(&repo_path, &result.file, result.line_number) {
-            result.context_before = before;
-            result.context_after = after;
+    // Read context for each result in parallel
+    let mut context_set = tokio::task::JoinSet::new();
+    for (i, result) in all_results.iter().enumerate() {
+        let repo = repo_path.clone();
+        let file = result.file.clone();
+        let line_number = result.line_number;
+        context_set.spawn(async move {
+            let ctx = read_context(&repo, &file, line_number).ok();
+            (i, ctx)
+        });
+    }
+    while let Some(result) = context_set.join_next().await {
+        if let Ok((i, Some((before, after)))) = result {
+            all_results[i].context_before = before;
+            all_results[i].context_after = after;
         }
     }
 
@@ -86,9 +113,13 @@ fn build_definition_patterns(symbol: &str, language: &str) -> Vec<String> {
     let s = escape_regex(symbol);
     // Use a single broad pattern that catches definitions across languages.
     // The -P flag (PCRE) is used for \s and \b support.
+    let method_modifier_pattern = format!(
+        r"(public|private|protected|static|override|abstract|async|get|set)\s+(?:(?:static|async|get|set)\s+)*{}\s*[\(<]", s
+    );
     match language {
         "typescript" | "tsx" | "javascript" | "jsx" => vec![
             format!(r"(function|const|let|var|class|interface|type|enum)\s+{}\b", s),
+            method_modifier_pattern.clone(),
         ],
         "rust" => vec![
             format!(r"(pub\s+)?(fn|struct|enum|trait|type|const|static|mod)\s+{}\b", s),
@@ -107,6 +138,7 @@ fn build_definition_patterns(symbol: &str, language: &str) -> Vec<String> {
         ],
         _ => vec![
             format!(r"(function|def|fn|func|class|struct|interface|type|const|let|var|val|enum)\s+{}\b", s),
+            method_modifier_pattern,
         ],
     }
 }
@@ -215,7 +247,7 @@ mod tests {
             "import { calculateTotal } from './utils';\ntest('adds numbers', () => { expect(calculateTotal([1,2])).toBe(3); });\n",
         ).unwrap();
 
-        // git add & commit
+        // git add & commit (required for git grep without --no-index)
         git(&dir, &["add", "."]);
         git(&dir, &["-c", "commit.gpgsign=false", "commit", "-m", "init"]);
 
@@ -223,12 +255,12 @@ mod tests {
         let patterns = build_definition_patterns("calculateTotal", "typescript");
         assert!(!patterns.is_empty(), "patterns should not be empty");
 
-        // Run git grep
+        // Run git grep (uses the index, no --no-index)
         let pattern = &patterns[0];
         let output = Command::new("git")
             .args(&[
                 "-C", dir.to_str().unwrap(),
-                "grep", "--no-index", "-rn", "-P", pattern,
+                "grep", "-n", "-P", pattern,
                 "--", "*.ts", "*.tsx",
             ])
             .output()
@@ -261,16 +293,15 @@ mod tests {
         cleanup(&dir);
     }
 
-    // ── Test 2: find_definition_untracked_file ──────────────────────────────
+    // ── Test 2: find_definition_committed_file ──────────────────────────────
 
     #[test]
-    fn test_find_definition_untracked_file() {
-        let dir = make_temp_dir("find_def_untracked");
+    fn test_find_definition_committed_file() {
+        let dir = make_temp_dir("find_def_committed");
 
-        // git init (but don't add/commit anything)
+        // git init and commit a file
         git(&dir, &["init"]);
 
-        // Create an untracked file
         let src_dir = dir.join("src");
         std::fs::create_dir_all(&src_dir).unwrap();
         std::fs::write(
@@ -278,13 +309,16 @@ mod tests {
             "export function myHelper(x: number): number { return x * 2; }\n",
         ).unwrap();
 
-        // Build pattern and run git grep --no-index (should find untracked files)
+        git(&dir, &["add", "."]);
+        git(&dir, &["-c", "commit.gpgsign=false", "commit", "-m", "init"]);
+
+        // Build pattern and run git grep (should find committed files)
         let patterns = build_definition_patterns("myHelper", "typescript");
         let pattern = &patterns[0];
         let output = Command::new("git")
             .args(&[
                 "-C", dir.to_str().unwrap(),
-                "grep", "--no-index", "-rn", "-P", pattern,
+                "grep", "-n", "-P", pattern,
                 "--", "*.ts", "*.tsx",
             ])
             .output()
@@ -296,7 +330,7 @@ mod tests {
             .filter_map(|line| parse_grep_line(line, dir.to_str().unwrap()))
             .collect();
 
-        assert!(!results.is_empty(), "git grep --no-index should find untracked files");
+        assert!(!results.is_empty(), "git grep should find committed files");
         assert!(results.iter().any(|r| r.file.contains("helper.ts")));
 
         cleanup(&dir);
@@ -307,7 +341,7 @@ mod tests {
     #[test]
     fn test_build_definition_patterns_typescript() {
         let patterns = build_definition_patterns("myFunc", "typescript");
-        assert_eq!(patterns.len(), 1);
+        assert!(patterns.len() >= 1, "should have at least one pattern");
         let p = &patterns[0];
         assert!(p.contains("function"), "should contain 'function'");
         assert!(p.contains("const"), "should contain 'const'");
@@ -322,6 +356,55 @@ mod tests {
         let patterns_special = build_definition_patterns("$value", "typescript");
         let p = &patterns_special[0];
         assert!(p.contains(r"\$value"), "dollar sign should be escaped: {}", p);
+    }
+
+    // ── Test 3b: build_definition_patterns_typescript_method_pattern ─────────
+
+    #[test]
+    fn test_build_definition_patterns_typescript_has_method_pattern() {
+        let patterns = build_definition_patterns("getMtc", "typescript");
+        assert!(patterns.len() >= 2, "TS should have at least 2 patterns (declaration + method), got {}", patterns.len());
+
+        // The method pattern should exist and match modifier-prefixed methods
+        let method_pattern = &patterns[1];
+        let re = regex::Regex::new(method_pattern).expect("method pattern should be valid regex");
+
+        // Should match method definitions with modifiers
+        assert!(re.is_match("  static getMtc("), "should match 'static getMtc('");
+        assert!(re.is_match("  async getMtc("), "should match 'async getMtc('");
+        assert!(re.is_match("  public getMtc("), "should match 'public getMtc('");
+        assert!(re.is_match("  private getMtc("), "should match 'private getMtc('");
+        assert!(re.is_match("  protected getMtc("), "should match 'protected getMtc('");
+        assert!(re.is_match("  get getMtc("), "should match 'get getMtc('");
+        assert!(re.is_match("  set getMtc("), "should match 'set getMtc('");
+        assert!(re.is_match("  static async getMtc("), "should match 'static async getMtc('");
+        assert!(re.is_match("  public static async getMtc("), "should match 'public static async getMtc('");
+        assert!(re.is_match("  override getMtc("), "should match 'override getMtc('");
+        assert!(re.is_match("  abstract getMtc("), "should match 'abstract getMtc('");
+        assert!(re.is_match("  async getMtc<T>("), "should match generic method 'async getMtc<T>('");
+    }
+
+    // ── Test 3c: method pattern also works for jsx/tsx/javascript ────────────
+
+    #[test]
+    fn test_build_definition_patterns_method_all_js_variants() {
+        for lang in &["typescript", "tsx", "javascript", "jsx"] {
+            let patterns = build_definition_patterns("doThing", lang);
+            assert!(patterns.len() >= 2, "{} should have at least 2 patterns, got {}", lang, patterns.len());
+        }
+    }
+
+    // ── Test 3d: fallback language also has method pattern ───────────────────
+
+    #[test]
+    fn test_build_definition_patterns_fallback_has_method_pattern() {
+        let patterns = build_definition_patterns("doThing", "unknown_lang");
+        assert!(patterns.len() >= 2, "fallback should have at least 2 patterns, got {}", patterns.len());
+
+        let method_pattern = &patterns[1];
+        let re = regex::Regex::new(method_pattern).expect("fallback method pattern should be valid regex");
+        assert!(re.is_match("  static doThing("), "fallback should match 'static doThing('");
+        assert!(re.is_match("  async doThing("), "fallback should match 'async doThing('");
     }
 
     // ── Test 4: build_definition_patterns_rust ──────────────────────────────
@@ -377,6 +460,106 @@ mod tests {
         assert!(unknown_exts.contains(&"ts"));
         assert!(unknown_exts.contains(&"py"));
         assert!(unknown_exts.contains(&"rs"));
+    }
+
+    // ── Test 8a: integration — find class method definitions via git grep ────
+
+    #[test]
+    fn test_find_class_method_definitions_via_git_grep() {
+        let dir = make_temp_dir("find_def_method");
+        git(&dir, &["init"]);
+
+        let src_dir = dir.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::write(
+            src_dir.join("service.ts"),
+            r#"class MyService {
+  private db: Database;
+
+  async getMtc(id: string) {
+    return this.db.find(id);
+  }
+
+  static fromConfig(config: Config) {
+    return new MyService(config);
+  }
+
+  get name() {
+    return "MyService";
+  }
+}
+"#,
+        ).unwrap();
+
+        // Also a file that merely calls getMtc (should NOT match the method pattern ideally)
+        std::fs::write(
+            src_dir.join("caller.ts"),
+            r#"import { svc } from './service';
+const result = svc.getMtc("abc");
+console.log(result);
+"#,
+        ).unwrap();
+
+        git(&dir, &["add", "."]);
+        git(&dir, &["-c", "commit.gpgsign=false", "commit", "-m", "init"]);
+
+        // Search for getMtc — should find the method definition
+        let patterns = build_definition_patterns("getMtc", "typescript");
+        let mut found_method = false;
+
+        for pattern in &patterns {
+            let output = Command::new("git")
+                .args(&[
+                    "-C", dir.to_str().unwrap(),
+                    "grep", "-n", "-P", pattern,
+                    "--", "*.ts", "*.tsx",
+                ])
+                .output()
+                .expect("git grep failed");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if let Some(result) = parse_grep_line(line, dir.to_str().unwrap()) {
+                    if result.file.contains("service.ts") && result.line_content.contains("getMtc") {
+                        found_method = true;
+                    }
+                }
+            }
+        }
+
+        assert!(found_method, "should find getMtc method definition in service.ts");
+        cleanup(&dir);
+    }
+
+    // ── Test 8b: integration — find_symbol_definition async ─────────────────
+
+    #[tokio::test]
+    async fn test_find_symbol_definition_async() {
+        let dir = make_temp_dir("find_def_async");
+        git(&dir, &["init"]);
+
+        let src_dir = dir.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::write(
+            src_dir.join("utils.ts"),
+            "export function calculateTotal(items: number[]): number {\n  return items.reduce((a, b) => a + b, 0);\n}\n",
+        ).unwrap();
+
+        git(&dir, &["add", "."]);
+        git(&dir, &["-c", "commit.gpgsign=false", "commit", "-m", "init"]);
+
+        let results = find_symbol_definition(
+            dir.to_str().unwrap().to_string(),
+            "calculateTotal".to_string(),
+            "typescript".to_string(),
+        ).await.expect("find_symbol_definition should succeed");
+
+        assert!(!results.is_empty(), "should find calculateTotal definition");
+        assert!(results.iter().any(|r| r.file.contains("utils.ts")));
+        // Should have context populated
+        let r = &results[0];
+        assert!(!r.context_after.is_empty(), "should have context_after populated");
+
+        cleanup(&dir);
     }
 
     // ── Test 8: escape_regex ─────────────────────────────────────────────────

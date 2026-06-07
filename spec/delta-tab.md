@@ -63,8 +63,21 @@ Clicking a file row calls `get_file_diff(repo_path, file)` which runs `git diff 
 
 - **Inline view** (default): standard unified diff with colour-coded lines
 - **Side-by-side view**: left pane (old), right pane (new), paired by consecutive remove/add blocks
+- **Current view**: full current file contents (working tree state) with syntax highlighting and line numbers, no diff markup or line highlights. Fetches file via `get_file_content(repo_path, file)` which reads the file from disk. Shows "File not found" for deleted files. Click-to-definition works in this view.
 - Toggle via buttons in the modal header
 - Closes on Escape or backdrop click
+
+### Text search (Cmd+F / Ctrl+F)
+
+The diff modal supports text search with keyboard shortcut activation:
+
+- **Open:** Press Cmd+F (Mac) or Ctrl+F (Windows/Linux) while the modal is open. The browser's built-in find dialog is suppressed via `preventDefault`.
+- **Search bar:** Appears between the header and the diff content. Contains a text input (auto-focused), match count display ("N of M"), up/down navigation arrows, and a close (X) button.
+- **Matching:** Case-insensitive substring search against the code content of each line (prefix-stripped — the `+`/`-`/space diff prefix and line numbers are excluded from matching).
+- **Highlighting:** All matching lines get `bg-yellow-500/20`. The current (active) match gets `bg-yellow-500/40` and is scrolled into view.
+- **Navigation:** Enter goes to next match, Shift+Enter goes to previous. Up/down arrow buttons also navigate. Navigation wraps around at boundaries.
+- **Close:** Clicking the X button or pressing Escape while the search input is focused closes the search bar (not the modal). Pressing Cmd+F again while search is open re-focuses the input.
+- **View modes:** Search works in all three views (inline, side-by-side, and current). In current view, `CurrentFileView` handles search highlighting internally and reports match count back to the modal.
 
 ## Empty states
 

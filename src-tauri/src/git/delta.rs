@@ -105,6 +105,13 @@ pub async fn get_file_diff(repo_path: String, file: String) -> Result<String, St
     Ok(diff)
 }
 
+#[tauri::command]
+pub async fn get_file_content(repo_path: String, file: String) -> Result<String, String> {
+    let file_path = std::path::Path::new(&repo_path).join(&file);
+    std::fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,6 +358,61 @@ mod tests {
         assert!(diff.contains("@@ -0,0 +1,2 @@"));
         assert!(diff.contains("+line1"));
         assert!(diff.contains("+line2"));
+
+        cleanup(&dir);
+    }
+
+    // ── get_file_content ──────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_file_content_returns_file_contents() {
+        let dir = setup_repo("file_content_basic");
+
+        std::fs::write(dir.join("hello.txt"), "hello\nworld\n").unwrap();
+
+        let content = get_file_content(
+            dir.to_str().unwrap().to_string(),
+            "hello.txt".to_string(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(content, "hello\nworld\n");
+
+        cleanup(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_get_file_content_returns_error_for_missing_file() {
+        let dir = setup_repo("file_content_missing");
+
+        let result = get_file_content(
+            dir.to_str().unwrap().to_string(),
+            "nonexistent.txt".to_string(),
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Failed to read file"));
+
+        cleanup(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_get_file_content_reads_nested_file() {
+        let dir = setup_repo("file_content_nested");
+
+        std::fs::create_dir_all(dir.join("src/components")).unwrap();
+        std::fs::write(dir.join("src/components/App.tsx"), "export default function App() {}\n").unwrap();
+
+        let content = get_file_content(
+            dir.to_str().unwrap().to_string(),
+            "src/components/App.tsx".to_string(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(content, "export default function App() {}\n");
 
         cleanup(&dir);
     }

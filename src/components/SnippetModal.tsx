@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import type { FileSnippet } from "../types";
 import { DiffModal } from "./DiffModal";
-import { DefinitionPopover } from "./DefinitionPopover";
+import { DefinitionPeek } from "./DefinitionPeek";
 import { SnippetBlock } from "./SnippetBlock";
 import { useRepoPath } from "@/contexts/RepoContext";
 
@@ -33,7 +33,7 @@ export function SnippetModal({ title, files, onClose }: {
   const repoPath = useRepoPath();
   const [fileDiff, setFileDiff] = useState<string | null>(null);
   const [fileDiffPath, setFileDiffPath] = useState("");
-  const [defPopover, setDefPopover] = useState<{ symbol: string; filePath: string; position: { x: number; y: number } } | null>(null);
+  const [peekState, setPeekState] = useState<{ symbol: string; filePath: string } | null>(null);
 
   const grouped = groupSnippetsByFile(files);
 
@@ -48,8 +48,8 @@ export function SnippetModal({ title, files, onClose }: {
   }
 
   function handleTokenClick(filePath: string) {
-    return (symbol: string, position: { x: number; y: number }) => {
-      setDefPopover({ symbol, filePath, position });
+    return (symbol: string, _position: { x: number; y: number }) => {
+      setPeekState({ symbol, filePath });
     };
   }
 
@@ -84,18 +84,17 @@ export function SnippetModal({ title, files, onClose }: {
               </div>
             ))}
           </div>
+          {peekState && (
+            <DefinitionPeek
+              symbol={peekState.symbol}
+              filePath={peekState.filePath}
+              onClose={() => setPeekState(null)}
+            />
+          )}
         </DialogContent>
       </Dialog>
       {fileDiff !== null && (
         <DiffModal diff={fileDiff} title={fileDiffPath} onClose={() => { setFileDiff(null); setFileDiffPath(""); }} />
-      )}
-      {defPopover && repoPath && (
-        <DefinitionPopover
-          symbol={defPopover.symbol}
-          filePath={defPopover.filePath}
-          position={defPopover.position}
-          onClose={() => setDefPopover(null)}
-        />
       )}
     </>
   );

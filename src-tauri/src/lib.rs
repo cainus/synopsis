@@ -15,6 +15,7 @@ pub fn run() {
             git::summary::get_summary,
             git::details::get_details,
             git::delta::get_file_diff,
+            git::delta::get_file_content,
             symbol_finder::find_symbol_definition,
             symbol_finder::read_file_range,
             git::tests_cmd::get_tests_result,
