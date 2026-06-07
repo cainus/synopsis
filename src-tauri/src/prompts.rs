@@ -2,11 +2,14 @@ pub const SUMMARY_PROMPT: &str = r#"Analyze these code changes and produce a bri
 
 Respond with ONLY a JSON object with these fields:
 - "headline": a one-sentence summary of all changes in under 15 words
+- "is_pure_refactor": boolean, true only if functionality/user behavior does not change
 - "bullets": an array of 3-5 key points, each with:
   - "label": a bold category label (1-3 words, e.g. "New feature", "Bug fix", "Refactor", "API change", "Dependencies", "Config", "Tests", "Performance")
   - "text": a single sentence (under 15 words) describing what changed
 
 Rules:
+- Set "is_pure_refactor" to true only for implementation-only restructuring that preserves existing behavior
+- Set "is_pure_refactor" to false for new features, bug fixes, behavior changes, API changes, dependency/config changes that alter behavior, or test-only changes
 - Each bullet should cover a distinct aspect of the changes
 - Labels should be short category tags, not sentences
 - Text should be specific and concrete, not vague

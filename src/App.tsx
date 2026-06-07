@@ -2,8 +2,7 @@ import { useState, useCallback } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { FolderPicker } from "./components/FolderPicker";
 import { DeltaTab } from "./components/DeltaTab";
-import { SummaryTab } from "./components/SummaryTab";
-import { DetailsTab } from "./components/DetailsTab";
+import { DescriptionTab } from "./components/DescriptionTab";
 import { TestsTab } from "./components/TestsTab";
 import { DiagramsTab } from "./components/DiagramsTab";
 import { useRepo } from "./hooks/useRepo";
@@ -11,7 +10,7 @@ import { RepoProvider } from "./contexts/RepoContext";
 import type { TabName } from "./types";
 
 function App() {
-  const [activeTab, setActiveTab] = useState<TabName>("summary");
+  const [activeTab, setActiveTab] = useState<TabName>("description");
   const {
     repoPath,
     setRepoPath,
@@ -25,7 +24,6 @@ function App() {
     loading,
     error,
     fetchSummary,
-    fetchDetails,
     fetchTests,
     fetchDiagrams,
   } = useRepo();
@@ -34,12 +32,11 @@ function App() {
     (tab: string) => {
       const t = tab as TabName;
       setActiveTab(t);
-      if (t === "summary") fetchSummary();
-      if (t === "details") fetchDetails();
+      if (t === "description") fetchSummary();
       if (t === "tests") fetchTests();
       if (t === "diagrams") fetchDiagrams();
     },
-    [fetchSummary, fetchDetails, fetchTests, fetchDiagrams]
+    [fetchSummary, fetchTests, fetchDiagrams]
   );
 
   return (
@@ -58,25 +55,30 @@ function App() {
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col flex-1 min-h-0">
           <TabsList className="w-full justify-start rounded-none border-b border-border bg-card h-auto p-0">
-            {(["summary", "details", "delta", "tests", "diagrams"] as const).map((tab) => (
+            {(["description", "delta", "tests", "diagrams"] as const).map((tab) => (
               <TabsTrigger
                 key={tab}
                 value={tab}
                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-5 py-2.5 text-sm font-medium"
               >
                 {tab === "delta" ? "Files" : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                {loading[tab] && (
+                {((tab === "description" && (loading.summary || loading.details)) ||
+                  (tab !== "description" && loading[tab])) && (
                   <span className="ml-1.5 inline-block w-2.5 h-2.5 border-[1.5px] border-muted border-t-primary rounded-full animate-spin" />
                 )}
               </TabsTrigger>
             ))}
           </TabsList>
 
-          <TabsContent value="summary" className="flex-1 overflow-auto p-4 mt-0">
-            <SummaryTab result={summaryResult} loading={loading.summary} hasRepo={!!repoPath} onGenerate={fetchSummary} />
-          </TabsContent>
-          <TabsContent value="details" className="flex-1 overflow-auto p-4 mt-0">
-            <DetailsTab result={detailsResult} loading={loading.details} hasRepo={!!repoPath} onGenerate={fetchDetails} />
+          <TabsContent value="description" className="flex-1 overflow-auto p-4 mt-0">
+            <DescriptionTab
+              summaryResult={summaryResult}
+              detailsResult={detailsResult}
+              summaryLoading={loading.summary}
+              detailsLoading={loading.details}
+              hasRepo={!!repoPath}
+              onGenerate={fetchSummary}
+            />
           </TabsContent>
           <TabsContent value="delta" className="flex-1 overflow-auto p-4 mt-0">
             <DeltaTab result={deltaResult} loading={loading.delta} />

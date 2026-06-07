@@ -42,6 +42,9 @@ export interface SummaryBullet {
 export interface SummaryResult {
   headline: string;
   bullets: SummaryBullet[];
+  has_application_code_changes: boolean;
+  has_test_changes: boolean;
+  is_pure_refactor: boolean;
 }
 
 export interface DetailsResult {
@@ -64,4 +67,4 @@ export interface DefinitionResult {
   context_after: string[];
 }
 
-export type TabName = "summary" | "details" | "delta" | "tests" | "diagrams";
+export type TabName = "description" | "delta" | "tests" | "diagrams";

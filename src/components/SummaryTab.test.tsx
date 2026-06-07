@@ -4,6 +4,9 @@ import type { SummaryResult } from "../types";
 
 const mockResult: SummaryResult = {
   headline: "Refactored auth module to use JWT tokens",
+  has_application_code_changes: true,
+  has_test_changes: false,
+  is_pure_refactor: false,
   bullets: [
     { label: "Auth", text: "Replaced session-based auth with JWT tokens across all endpoints" },
     { label: "Middleware", text: "New jwtAuth middleware validates and decodes tokens on each request" },
@@ -48,7 +51,13 @@ describe("SummaryTab", () => {
   });
 
   it("renders no bullets when empty", () => {
-    const empty: SummaryResult = { headline: "No changes", bullets: [] };
+    const empty: SummaryResult = {
+      headline: "No changes",
+      bullets: [],
+      has_application_code_changes: false,
+      has_test_changes: false,
+      is_pure_refactor: false,
+    };
     render(<SummaryTab result={empty} {...defaultProps} />);
     expect(screen.getByText("No changes")).toBeInTheDocument();
     expect(document.querySelector("ul")).not.toBeInTheDocument();

@@ -54,6 +54,12 @@ pub struct SummaryBullet {
 pub struct SummaryResult {
     pub headline: String,
     pub bullets: Vec<SummaryBullet>,
+    #[serde(default)]
+    pub has_application_code_changes: bool,
+    #[serde(default)]
+    pub has_test_changes: bool,
+    #[serde(default)]
+    pub is_pure_refactor: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
