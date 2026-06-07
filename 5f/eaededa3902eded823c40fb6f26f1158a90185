@@ -1,0 +1,50 @@
+src/components/DescriptionTab.tsx
+  s_e6b8799f39d55a::t_efc95dc06eadbc 161,169
+  s_e6b8799f39d55a::t_270342deae5246 110
+  s_e6b8799f39d55a::t_5e842fb96c48b9 1-26,38-39,41-109,111-160,162-168,170-260,279-305
+  s_e6b8799f39d55a::t_30fcfd3a76793c 27-37,40,261-278
+src/components/DescriptionTab.test.tsx
+  s_e6b8799f39d55a::t_1fc12768d25c19 1-166
+src/types.ts
+  s_e6b8799f39d55a::t_19132cce19cb9d 45-47,70
+src-tauri/src/git/types.rs
+  s_e6b8799f39d55a::t_6ea62ed0612b46 57-62
+src/App.tsx
+  s_e6b8799f39d55a::t_16c50e488ee6b1 5,13,35,39,58,65-66,73-81
+src-tauri/src/prompts.rs
+  s_e6b8799f39d55a::t_316faf9f8f1eb2 5,11-12
+src-tauri/src/git/summary.rs
+  s_e6b8799f39d55a::t_7d7142a3e8331e 8-18,22-44,53-65,70-72,83-85,94-95,99-121
+  s_e6b8799f39d55a::t_2a5a0977bff3bc 19-21,45-52,89,92-93
+src/components/SummaryTab.test.tsx
+  s_e6b8799f39d55a::t_4a1254abba917e 7-9,54-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "5feaededa3902eded823c40fb6f26f1158a90185",
+  "prompts": {
+    "a863d7608bdec08f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb2a002c-65d1-412d-8d4d-af0ceeee9f4f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Greggory Caines <gregg@caines.ca>",
+      "total_additions": 2605,
+      "total_deletions": 275,
+      "accepted_lines": 1960,
+      "overriden_lines": 0
+    }
+  },
+  "sessions": {
+    "s_e6b8799f39d55a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea2f0-94a7-7ca0-a91c-3bff51dae58b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Greggory Caines <gregg@caines.ca>"
+    }
+  }
+}
